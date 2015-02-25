@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Context copyXML="true">
+	<Parameter name="database.jdbc.driver" value="org.postgresql.Driver"
+		description="canonical name of JDBC driver class" />
+	<Parameter name="database.jdbc.url"
+		value="jdbc:postgresql://localhost/test?user=test&amp;password=test"
+		description="full JDBC connection URL, including username and password" />
+
+	<Parameter name="shibboleth.discofeed.url" value="http://localhost/Shibboleth.sso/DiscoFeed"
+		description="absolute URL to /Shibboleth.sso/DiscoFeed, either localhost or using SSL" />
+	<Parameter name="shibboleth.login.url" value="http://localhost/Shibboleth.sso/Login"
+		description="URL to /Shibboleth.sso/Login, preferably absolute and using SSL" />
+	<Parameter name="shibboleth.default.target" value=""
+		description="default URL to visit after login if none given; empty to return an error message in that case" />
+
+	<Parameter name="discovery.web.root" value="/shibboleth/"
+		description="root URL of servlet, usually absolute but without scheme component" />
+	<Parameter name="discovery.friendly.idps" value="6"
+		description="number of IdPs to show in the 'friendly' discovery" />
+	<Parameter name="discovery.friendly.others" value="other institution"
+		description="text to show on the 'other IdPs' button" />
+</Context>

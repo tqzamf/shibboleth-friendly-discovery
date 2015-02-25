@@ -1,0 +1,45 @@
+#shibboleth-button {
+	margin: none;
+	padding: none;
+}
+
+#shibboleth-discovery {
+	margin: none;
+	padding: none;
+}
+
+#shibboleth-discovery br {
+	clear: left;
+}
+
+#shibboleth-discovery a {
+	display: block;
+	float: left;
+	width: 11em;
+	height: 8em;
+	margin: 0em 1em 1em 0em;
+	padding: 1em 1em .5em 1em;
+	border: 1px solid #eee;
+	border-radius: .4em;
+	overflow: hidden;
+}
+
+#shibboleth-discovery a:hover {
+	border: 1px solid #ccc;
+	background-color: #eee;
+}
+
+#shibboleth-discovery a img {
+	display: block;
+	height: 6em;
+}
+
+#shibboleth-discovery a p {
+	text-align: center;
+	margin: 0 auto;
+	white-space: normal;
+}
+
+#shibboleth-discovery a.shibboleth-discovery-others {
+	width: 16em;
+}
