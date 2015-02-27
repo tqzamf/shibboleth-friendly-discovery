@@ -20,7 +20,8 @@ import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 @SuppressWarnings("serial")
 public abstract class AbstractShibbolethServlet extends HttpServlet {
 	public static final int MAX_IDPS = 1000;
-	protected static final String ENCODING = "UTF-8";
+	public static final String ENCODING = "UTF-8";
+	public static final String LANGUAGE = "en";
 	private static final Logger LOGGER = Logger
 			.getLogger(AbstractShibbolethServlet.class.getCanonicalName());
 
@@ -52,14 +53,6 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	}
 
 	/**
-	 * @return a non-overlapping 24-hour period containing the current time
-	 *         instant. doesn't have any relation to the calendar day though.
-	 */
-	protected int getCurrentDay() {
-		return (int) (System.currentTimeMillis() / 86400000);
-	}
-
-	/**
 	 * Determines (a 16-bit hash of) the network containing the connecting
 	 * client's IP address. The hash is chosen so that "most" hosts in the same
 	 * network end up in the same bin, while not creating too many collisions of
@@ -70,7 +63,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 *            the client's request
 	 * @return network hash
 	 */
-	protected int getClientNetworkHash(final HttpServletRequest req) {
+	protected static int getClientNetworkHash(final HttpServletRequest req) {
 		final byte[] addr = InetAddresses.forString(req.getRemoteAddr())
 				.getAddress();
 		// IPv4: uses the /16 prefix. should roughly match the network size of a
@@ -102,14 +95,15 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 		return webRoot;
 	}
 
-	protected String getDefaultTarget() throws ServletException {
-		final String defaultTarget = getContextParameter("shibboleth.default.target");
-		if (defaultTarget.isEmpty())
+	protected String getContextDefaultParameter(final String name)
+			throws ServletException {
+		final String dflt = getContextParameter("shibboleth.default." + name);
+		if (dflt.isEmpty())
 			return null;
-		return defaultTarget;
+		return dflt;
 	}
 
-	protected String getResourceAsString(final String resource)
+	protected static String getResourceAsString(final String resource)
 			throws ServletException {
 		final InputStream in = DiscoveryServlet.class
 				.getResourceAsStream(resource);

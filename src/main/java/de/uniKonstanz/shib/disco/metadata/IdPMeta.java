@@ -27,10 +27,6 @@ public class IdPMeta implements Comparable<IdPMeta> {
 		escDisplayName = HTML_ESCAPER.escape(displayName);
 	}
 
-	// public IdPMeta(final String entityID) {
-	// this(entityID, entityID, LogosServlet.GENERIC_LOGO);
-	// }
-
 	public String getDisplayName() {
 		return displayName;
 	}

@@ -26,11 +26,11 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	private static final Logger LOGGER = Logger.getLogger(LoginServlet.class
 			.getCanonicalName());
 	private ReconnectingDatabase db;
-	private String defaultTarget;
-	private String shibbolethLogin;
+	public String defaultTarget;
 	private LoadingCache<LoginTuple, Counter> counter;
 	DatabaseWorkerThread updateThread;
 	private String webRoot;
+	private String defaultLogin;
 
 	@Override
 	public void init() throws ServletException {
@@ -38,11 +38,11 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		updateThread = new DatabaseWorkerThread(db);
 
 		webRoot = getWebRoot();
-		defaultTarget = getDefaultTarget();
-		shibbolethLogin = getContextParameter("shibboleth.login.url");
-		if (!shibbolethLogin.startsWith("https://"))
+		defaultTarget = getContextDefaultParameter("target");
+		defaultLogin = getContextDefaultParameter("login");
+		if (!defaultLogin.startsWith("https://"))
 			LOGGER.warning("shibboleth login URL isn't absolute or non-SSL: "
-					+ shibbolethLogin);
+					+ defaultLogin);
 
 		counter = CacheBuilder.newBuilder()
 				.expireAfterWrite(10, TimeUnit.MINUTES)
@@ -70,19 +70,18 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	@Override
 	protected void doGet(final HttpServletRequest req,
 			final HttpServletResponse resp) throws IOException {
+		resp.setCharacterEncoding(ENCODING);
 		// get target attribute, or use default. if none given and no default,
 		// that's a fatal error; we cannot recover from that.
-		String target = req.getParameter("target");
-		if (target == null)
-			target = defaultTarget;
-		if (target == null) {
-			LOGGER.warning("login request without target attribute from "
+		final LoginParams params = LoginParams.parse(req, defaultTarget,
+				defaultLogin);
+		if (params == null) {
+			LOGGER.warning("request without required attributes from "
 					+ req.getRemoteAddr() + "; sending error");
 			resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
-					"missing request attribute: target");
+					"missing target/login or return attributes");
 			return;
 		}
-		final String encodedTarget = URLEncoder.encode(target, "UTF-8");
 
 		// get entityID for shibboleth login URL. if the entityID is missing for
 		// some reason, redirect to discovery again so the user can pick one.
@@ -91,7 +90,8 @@ public class LoginServlet extends AbstractShibbolethServlet {
 			LOGGER.info("login request without entityID from "
 					+ req.getRemoteAddr() + "; redirecting to discovery");
 			resp.sendRedirect(webRoot + "/discovery/full?target="
-					+ encodedTarget);
+					+ params.getEncodedTarget() + "&login="
+					+ params.getEncodedLogin());
 			return;
 		}
 
@@ -103,7 +103,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		final Cookie cookie = new Cookie(IDP_COOKIE, encodedEntityID);
 		cookie.setMaxAge(COOKIE_LIFETIME);
 		resp.addCookie(cookie);
-		resp.sendRedirect(shibbolethLogin + "?entityID=" + encodedEntityID
-				+ "&target=" + encodedTarget);
+		resp.sendRedirect(params.getLogin() + "?SAMLDS=1&entityID="
+				+ encodedEntityID + "&target=" + params.getEncodedTarget());
 	}
 }

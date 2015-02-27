@@ -15,13 +15,13 @@ import javax.servlet.ServletException;
 
 import org.codehaus.jackson.type.TypeReference;
 
+import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.LogosServlet;
 import de.uniKonstanz.shib.disco.util.HTTP;
 
 public class MetadataUpdateThread extends Thread {
 	private static final Logger LOGGER = Logger
 			.getLogger(MetadataUpdateThread.class.getCanonicalName());
-	private static final String DEFAULT_LANGUAGE = "en";
 	private final String feedURL;
 	private final LogoConverter converter;
 	private Map<String, IdPMeta> metadata;
@@ -73,8 +73,8 @@ public class MetadataUpdateThread extends Thread {
 				if (file != null)
 					logo = file.getName();
 			}
-			final String displayName = idp.getDisplayName(DEFAULT_LANGUAGE,
-					DEFAULT_LANGUAGE);
+			final String displayName = idp
+					.getDisplayName(AbstractShibbolethServlet.LANGUAGE);
 			final String entityID = idp.getEntityID();
 			map.put(entityID, new IdPMeta(entityID, displayName, logo));
 		}

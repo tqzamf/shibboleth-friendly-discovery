@@ -8,10 +8,10 @@
 
 	<Parameter name="shibboleth.discofeed.url" value="http://localhost/Shibboleth.sso/DiscoFeed"
 		description="absolute URL to /Shibboleth.sso/DiscoFeed, either localhost or using SSL" />
-	<Parameter name="shibboleth.login.url" value="http://localhost/Shibboleth.sso/Login"
-		description="URL to /Shibboleth.sso/Login, preferably absolute and using SSL" />
 	<Parameter name="shibboleth.default.target" value=""
 		description="default URL to visit after login if none given; empty to return an error message in that case" />
+	<Parameter name="shibboleth.default.login" value=""
+		description="default URL to /Shibboleth.sso/Login used if none given; empty to return an error" />
 
 	<Parameter name="discovery.web.root" value="/shibboleth/"
 		description="root URL of servlet, usually absolute but without scheme component" />

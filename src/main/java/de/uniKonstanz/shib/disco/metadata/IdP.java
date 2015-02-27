@@ -32,17 +32,11 @@ public class IdP {
 	}
 
 	@JsonIgnore
-	public String getDisplayName(final String language,
-			final String fallbackLanguage) {
+	public String getDisplayName(final String language) {
 		if (displayNames != null) {
 			// try to find a nonempty display name in the target language
 			for (final TextAttr i : displayNames)
 				if (i.isLanguage(language) && !i.isEmpty())
-					return i.value;
-
-			// try to find a nonempty display name in the fallback language
-			for (final TextAttr i : displayNames)
-				if (i.isLanguage(fallbackLanguage) && !i.isEmpty())
 					return i.value;
 
 			// try to find any nonempty display name

@@ -40,6 +40,10 @@
 	white-space: normal;
 }
 
+#shibboleth-discovery br {
+	clear: left;
+}
+
 #shibboleth-discovery a.shibboleth-discovery-others {
 	width: 16em;
 }
