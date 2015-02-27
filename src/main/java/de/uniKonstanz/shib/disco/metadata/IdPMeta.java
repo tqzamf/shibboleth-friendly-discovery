@@ -17,7 +17,7 @@ public class IdPMeta implements Comparable<IdPMeta> {
 	public IdPMeta(final String entityID, final String displayName,
 			final String logo) {
 		this.entityID = entityID;
-		this.displayName = displayName;
+		this.displayName = displayName.replaceAll("\\s+", " ").trim();
 		this.logo = logo;
 		try {
 			encEntityID = URLEncoder.encode(entityID, "UTF-8");

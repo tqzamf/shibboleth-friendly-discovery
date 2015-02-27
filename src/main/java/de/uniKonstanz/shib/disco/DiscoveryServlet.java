@@ -14,6 +14,9 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.google.common.escape.Escaper;
+import com.google.common.escape.Escapers;
+
 import de.uniKonstanz.shib.disco.loginlogger.IdPRanking;
 import de.uniKonstanz.shib.disco.loginlogger.LoginParams;
 import de.uniKonstanz.shib.disco.loginlogger.LoginServlet;
@@ -25,6 +28,9 @@ import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private static final Logger LOGGER = Logger
 			.getLogger(DiscoveryServlet.class.getCanonicalName());
+	private static final Escaper jsEscaper = Escapers.builder()
+			.addEscape('\n', "\\n").addEscape('\r', "\\r")
+			.addEscape('\t', "\\t").addEscape('\'', "\\'").build();
 	private String webRoot;
 	private ReconnectingDatabase db;
 	private MetadataUpdateThread meta;
@@ -54,13 +60,25 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		friendlyHeader = getResourceAsString("friendly-header.html");
 		fullHeader = getResourceAsString("full-header.html");
 		footer = getResourceAsString("footer.html");
-		wayf = getResourceAsString("wayf.html");
-		bookmarkNotice = getResourceAsString("bookmark-notice.html");
+		wayf = sanitizeJS(getResourceAsString("wayf.html"));
+		bookmarkNotice = sanitizeJS(getResourceAsString("bookmark-notice.html"));
 
 		db = getDatabaseConnection();
 		ranking = new IdPRanking(db, numTopIdPs);
 		meta = new MetadataUpdateThread(discoFeed, getLogoCacheDir());
 		meta.start();
+	}
+
+	/**
+	 * Escape characters that are unsafe to use in single-quoted JavaScript
+	 * strings. Note that this should be used on controlled input <em>only</em>.
+	 * 
+	 * @param data
+	 *            string to sanitize for inclusion in single quotes
+	 * @return string with newlines, single-quotes, etc. escaped
+	 */
+	private String sanitizeJS(final String data) {
+		return jsEscaper.escape(data);
 	}
 
 	@Override
