@@ -1,8 +1,3 @@
-#shibboleth-button {
-	margin: none;
-	padding: none;
-}
-
 #shibboleth-discovery {
 	margin: none;
 	padding: none;
@@ -51,4 +46,10 @@
 
 #shibboleth-discovery a.shibboleth-discovery-others {
 	width: 16em;
+}
+
+#shibboleth-discovery #shibboleth-discovery-search {
+	display: block;
+	width: 29em;
+	margin: .5em 1em 1em 0em;
 }
