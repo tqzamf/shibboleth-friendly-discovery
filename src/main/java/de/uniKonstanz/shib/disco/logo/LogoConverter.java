@@ -1,4 +1,4 @@
-package de.uniKonstanz.shib.disco.metadata;
+package de.uniKonstanz.shib.disco.logo;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
@@ -23,16 +23,18 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
+import de.uniKonstanz.shib.disco.metadata.InconvertibleLogoException;
 import de.uniKonstanz.shib.disco.util.HTTP;
 
 public class LogoConverter {
 	private static final Logger LOGGER = Logger.getLogger(LogoConverter.class
 			.getCanonicalName());
 	private static final int MAX_LOGO_SIZE = 500000;
-	private static final int LOGO_WIDTH = 275 - 2;
+	private static final int LOGO_WIDTH = 300 - 2;
 	private static final int LOGO_HEIGHT = 150 - 2;
 	private final File logoDir;
 	private final LoadingCache<String, File> cache;
+	private IdentIcon ident;
 
 	public LogoConverter(final File logoDir) {
 		this.logoDir = logoDir;
@@ -49,6 +51,7 @@ public class LogoConverter {
 						return convertLogo(key);
 					}
 				});
+		ident = new IdentIcon(37, 3, 2);
 	}
 
 	public File getLogo(final String url) {
@@ -63,8 +66,30 @@ public class LogoConverter {
 						+ e.getMessage());
 			else
 				// other exceptions definitely shouldn't happen → long warning
-				LOGGER.log(Level.WARNING, url + " cannot be converted",
-						e.getCause());
+				LOGGER.log(Level.WARNING, "cannot convert " + url, e.getCause());
+			return null;
+		}
+	}
+
+	public File getFallbackLogo(final String url) {
+		try {
+			final String checksum = DigestUtils.shaHex(url);
+			final File file = new File(logoDir, "i" + checksum + ".png");
+			if (file.exists() && file.length() > 0)
+				return file;
+			if (file.exists())
+				// file exists, but is empty. try to recreate it.
+				file.delete();
+
+			final BufferedImage img = ident.getSymmetricalIcon(checksum);
+			final BufferedImage transp = whiteToTransparency(img);
+			writeTo(transp, file);
+			return file;
+		} catch (final IOException e) {
+			// fallback logo generation is pretty failsafe; if anything does go
+			// wrong, that's a major issue → long warning
+			LOGGER.log(Level.WARNING, "cannot generate fallback icon for "
+					+ url, e.getCause());
 			return null;
 		}
 	}
@@ -171,6 +196,12 @@ public class LogoConverter {
 					+ Arrays.toString(sample));
 		}
 
+		final BufferedImage buffer = whiteToTransparency(image);
+		// write result to PNG, using a temp file to avoid incomplete files.
+		writeTo(buffer, outputFile);
+	}
+
+	private static BufferedImage whiteToTransparency(final BufferedImage image) {
 		// calculate scaling factor to fit into a standard 275x150 rectangle
 		final float fX = image.getWidth() / (float) LOGO_WIDTH;
 		final float fY = image.getHeight() / (float) LOGO_HEIGHT;
@@ -219,12 +250,16 @@ public class LogoConverter {
 		}
 		buffer.getRaster().setPixels(0, 0, LOGO_WIDTH + 2, LOGO_HEIGHT + 2,
 				pixels);
+		return buffer;
+	}
 
-		// write result to PNG, using a temp file to avoid incomplete files.
+	private static void writeTo(final BufferedImage buffer,
+			final File outputFile) throws IOException {
 		final File temp = new File(outputFile.getParent(), outputFile.getName()
 				+ ".tmp");
 		temp.delete();
-		ImageIO.write(buffer, "png", temp);
+		if (!ImageIO.write(buffer, "png", temp))
+			throw new IOException("cannot convert to PNG");
 		if (temp.renameTo(outputFile))
 			return;
 		if (!outputFile.exists())

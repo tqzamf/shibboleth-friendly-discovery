@@ -10,7 +10,7 @@ public class IdPMeta implements Comparable<IdPMeta> {
 	private static final Escaper HTML_ESCAPER = HtmlEscapers.htmlEscaper();
 	private final String entityID;
 	private final String displayName;
-	private final String logo;
+	private String logo;
 	private final String encEntityID;
 	private final String escDisplayName;
 
@@ -54,5 +54,9 @@ public class IdPMeta implements Comparable<IdPMeta> {
 	@Override
 	public String toString() {
 		return entityID + ": " + displayName + "; " + logo;
+	}
+
+	public void setLogo(final String logo) {
+		this.logo = logo;
 	}
 }

@@ -11,7 +11,7 @@
 	</servlet>
 	<servlet>
 		<servlet-name>LogosServlet</servlet-name>
-		<servlet-class>de.uniKonstanz.shib.disco.LogosServlet</servlet-class>
+		<servlet-class>de.uniKonstanz.shib.disco.logo.LogosServlet</servlet-class>
 		<load-on-startup>1</load-on-startup>
 	</servlet>
 	<servlet>

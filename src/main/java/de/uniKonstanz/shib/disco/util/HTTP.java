@@ -20,6 +20,8 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
 
 public class HTTP {
+	/** Time until the request has to be completed: 1 minute. */
+	private static final long TIMEOUT = 60 * 1000;
 	private static final Charset UTF8 = Charset.forName("UTF-8");
 	private static final RequestConfig config;
 	private static final CloseableHttpClient client;
@@ -84,29 +86,6 @@ public class HTTP {
 		return UTF8;
 	}
 
-	//
-	// public static String getString(final String url, final int maxSize)
-	// throws IOException {
-	// final HttpGet req = new HttpGet(url);
-	// try {
-	// final HttpEntity entity = performRequest(req);
-	// final byte[] buffer = readBytes(entity, maxSize);
-	//
-	// // convert to string, using the character set provided by the source
-	// // if possible. fall back to UTF-8 otherwise.
-	// final Header encoding = entity.getContentEncoding();
-	// final Charset charset;
-	// if (encoding != null && encoding.getValue() != null)
-	// charset = Charset.forName(encoding.getValue());
-	// else
-	// charset = UTF8;
-	// return new String(buffer, charset);
-	// } finally {
-	// // make sure request can be reused
-	// req.reset();
-	// }
-	// }
-
 	/**
 	 * Reads a URL into a {@code byte[]}, throwing an {@link IOException} if the
 	 * entity is larger than {@code maxSize} bytes.
@@ -144,7 +123,8 @@ public class HTTP {
 
 	/**
 	 * Reads an {@link HttpEntity} into a {@code byte[]}, throwing an
-	 * {@link IOException} if the entity is larger than {@code maxSize} bytes.
+	 * {@link IOException} if the entity is larger than {@code maxSize} bytes or
+	 * the request takes longer than {@link #TIMEOUT} to complete.
 	 * 
 	 * @param entity
 	 *            {@link HttpEntity} to read into memory
@@ -190,8 +170,9 @@ public class HTTP {
 
 	/**
 	 * Reads bytes until EOF, throwing an {@link IOException} if the stream
-	 * contains more bytes than fit into the buffer. The entire stream will be
-	 * read, but not closed.
+	 * contains more bytes than fit into the buffer or the request takes longer
+	 * than {@link #TIMEOUT} to complete. The entire stream will be read, but
+	 * not closed.
 	 * 
 	 * @param in
 	 *            {@link InputStream} to read
@@ -200,16 +181,21 @@ public class HTTP {
 	 * @return number of bytes read
 	 * @throws IOException
 	 *             if {@code in} contains more bytes than fit into
-	 *             {@code buffer}, and on IO errors
+	 *             {@code buffer}, if reading the request takes too long, and on
+	 *             IO errors
 	 */
 	private static int readBytes(final InputStream in, final byte[] buffer)
 			throws IOException {
+		final long timeout = System.currentTimeMillis() + TIMEOUT;
 		int offset = 0;
 		while (offset < buffer.length) {
 			final int len = in.read(buffer, offset, buffer.length - offset);
 			if (len <= 0)
 				// EOF before end of buffer, ie. no overflow
 				return offset;
+			final long now = System.currentTimeMillis();
+			if (now > timeout)
+				throw new IOException("read timed out: " + (now - timeout));
 			offset += len;
 		}
 

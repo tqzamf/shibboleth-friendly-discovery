@@ -16,7 +16,9 @@ import javax.servlet.ServletException;
 import org.codehaus.jackson.type.TypeReference;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
-import de.uniKonstanz.shib.disco.LogosServlet;
+import de.uniKonstanz.shib.disco.logo.LogoConverter;
+import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
+import de.uniKonstanz.shib.disco.logo.LogosServlet;
 import de.uniKonstanz.shib.disco.util.HTTP;
 
 public class MetadataUpdateThread extends Thread {
@@ -66,17 +68,20 @@ public class MetadataUpdateThread extends Thread {
 
 		final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>();
 		for (final IdP idp : idps) {
+			final String entityID = idp.getEntityID();
 			final String logoURL = idp.getBiggestLogo();
-			String logo = LogosServlet.GENERIC_LOGO;
-			if (logoURL != null) {
-				final File file = converter.getLogo(logoURL);
-				if (file != null)
-					logo = file.getName();
-			}
+			final String logo;
+			if (map != null && map.containsKey(entityID))
+				// keep previous logo if possible, to avoid the generic logo
+				// flickering in.
+				logo = map.get(entityID).getLogoFilename();
+			else
+				logo = LogosServlet.GENERIC_LOGO;
 			final String displayName = idp
 					.getDisplayName(AbstractShibbolethServlet.LANGUAGE);
-			final String entityID = idp.getEntityID();
-			map.put(entityID, new IdPMeta(entityID, displayName, logo));
+			final IdPMeta meta = new IdPMeta(entityID, displayName, logo);
+			new LogoUpdaterThread(converter, meta, logoURL).start();
+			map.put(entityID, meta);
 		}
 
 		metadata = map;

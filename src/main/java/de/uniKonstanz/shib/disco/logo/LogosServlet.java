@@ -1,4 +1,4 @@
-package de.uniKonstanz.shib.disco;
+package de.uniKonstanz.shib.disco.logo;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -17,6 +17,8 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.io.ByteStreams;
+
+import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 
 @SuppressWarnings("serial")
 public class LogosServlet extends AbstractShibbolethServlet {
