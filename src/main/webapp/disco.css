@@ -18,9 +18,13 @@
 	width: 11em;
 	height: 8em;
 	margin: 0em 1em 1em 0em;
-	padding: 1em 1em .5em 1em;
+	padding: .5em 1em 1em 1em;
 	border: 1px solid #eee;
 	border-radius: .4em;
+	background-color: #fff;
+	color: black;
+	font-family: sans-serif;
+	text-decoration: none;
 	overflow: hidden;
 }
 
@@ -31,7 +35,8 @@
 
 #shibboleth-discovery a img {
 	display: block;
-	height: 6em;
+	height: 5.5em;
+	margin-bottom: .25em;
 }
 
 #shibboleth-discovery a p {

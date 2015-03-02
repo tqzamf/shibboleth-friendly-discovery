@@ -14,9 +14,6 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import com.google.common.escape.Escaper;
-import com.google.common.escape.Escapers;
-
 import de.uniKonstanz.shib.disco.loginlogger.IdPRanking;
 import de.uniKonstanz.shib.disco.loginlogger.LoginParams;
 import de.uniKonstanz.shib.disco.loginlogger.LoginServlet;
@@ -28,9 +25,6 @@ import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private static final Logger LOGGER = Logger
 			.getLogger(DiscoveryServlet.class.getCanonicalName());
-	private static final Escaper jsEscaper = Escapers.builder()
-			.addEscape('\n', "\\n").addEscape('\r', "\\r")
-			.addEscape('\t', "\\t").addEscape('\'', "\\'").build();
 	private String webRoot;
 	private ReconnectingDatabase db;
 	private MetadataUpdateThread meta;
@@ -60,8 +54,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		friendlyHeader = getResourceAsString("friendly-header.html");
 		fullHeader = getResourceAsString("full-header.html");
 		footer = getResourceAsString("footer.html");
-		wayf = sanitizeJS(getResourceAsString("wayf.html"));
-		bookmarkNotice = sanitizeJS(getResourceAsString("bookmark-notice.html"));
+		wayf = normalize(getResourceAsString("wayf.html"));
+		bookmarkNotice = normalize(getResourceAsString("bookmark-notice.html"));
 
 		db = getDatabaseConnection();
 		ranking = new IdPRanking(db, numTopIdPs);
@@ -69,16 +63,9 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		meta.start();
 	}
 
-	/**
-	 * Escape characters that are unsafe to use in single-quoted JavaScript
-	 * strings. Note that this should be used on controlled input <em>only</em>.
-	 * 
-	 * @param data
-	 *            string to sanitize for inclusion in single quotes
-	 * @return string with newlines, single-quotes, etc. escaped
-	 */
-	private String sanitizeJS(final String data) {
-		return jsEscaper.escape(data);
+	/** Normalize whitespace. Not safe to use on untrusted data. */
+	private String normalize(final String data) {
+		return data.replaceAll("\\s+", " ");
 	}
 
 	@Override
@@ -157,7 +144,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		for (final IdPMeta idp : idps)
 			buildHTML(buffer, idp, params);
 		buildOtherIdPsButton(buffer, params);
-		buffer.append("');");
+		buffer.append("<br />');");
 
 		resp.setContentType("text/javascript");
 		final PrintWriter out = resp.getWriter();
