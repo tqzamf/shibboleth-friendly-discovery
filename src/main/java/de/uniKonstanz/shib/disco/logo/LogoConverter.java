@@ -51,7 +51,7 @@ public class LogoConverter {
 						return convertLogo(key);
 					}
 				});
-		ident = new IdentIcon(37, 3, 2);
+		ident = new IdentIcon(37, 4, 2);
 	}
 
 	public File getLogo(final String url) {
