@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -20,40 +21,41 @@ import com.google.common.io.ByteStreams;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 
+/**
+ * Serves logos from the logo cache directory, caching them in memory to reduce
+ * I/O overhead. Files persist until they aren't accessed for a day, but IdP
+ * logos are named after a hash of the file contents, so if the logo for an IdP
+ * changes, that change will be visible immediately.
+ * 
+ * Also note that there is no automatic cleanup of the logo cache directory,
+ * because it isn't expected to fill too quickly. Nevertheless, emptying it
+ * about once a year may be a good idea.
+ */
 @SuppressWarnings("serial")
 public class LogosServlet extends AbstractShibbolethServlet {
-	public static final String GENERIC_LOGO = "generic.png";
-	private static final Logger LOGGER = Logger.getLogger(LogosServlet.class
+	public static final Logger LOGGER = Logger.getLogger(LogosServlet.class
 			.getCanonicalName());
-	private File logoCache;
+	/** Filename of the generic logo in the logo "directory". */
+	public static final String GENERIC_LOGO = "generic.png";
+	public File logoCache;
 	private LoadingCache<String, byte[]> cache;
 	private byte[] generic;
 
 	@Override
 	public void init() throws ServletException {
 		logoCache = getLogoCacheDir();
-		final InputStream in = LogosServlet.class
-				.getResourceAsStream(GENERIC_LOGO);
-		if (in == null)
-			throw new ServletException("missing generic logo");
-		try {
-			generic = ByteStreams.toByteArray(in);
-			in.close();
-		} catch (final IOException e) {
-			throw new ServletException("cannot read generic logo");
-		}
+		generic = getResource("generic.png");
 
 		// cache policy: expire logos not accessed for a day. because they are
 		// updated at most ever hour, this limits the number of logos to 24 per
 		// IdP, without unnecessarily expiring logos that are used frequently,
 		// but only in a daily usage pattern.
-		// use IdP count limit as a backup measure to avoid excessive memory
+		// uses soft values as a backup measure to avoid excessive memory
 		// consumption.
 		cache = CacheBuilder.newBuilder().expireAfterAccess(1, TimeUnit.DAYS)
-				.maximumSize(AbstractShibbolethServlet.MAX_IDPS)
-				.build(new CacheLoader<String, byte[]>() {
+				.softValues().build(new CacheLoader<String, byte[]>() {
 					@Override
-					public byte[] load(final String key) {
+					public byte[] load(final String key) throws IOException {
 						return getLogoData(key);
 					}
 				});
@@ -78,7 +80,7 @@ public class LogosServlet extends AbstractShibbolethServlet {
 
 		byte[] data;
 		if (!filename.equals(GENERIC_LOGO))
-			data = cache.getUnchecked(filename);
+			data = getLogo(filename);
 		else
 			data = generic;
 		resp.setContentType("image/png");
@@ -88,21 +90,43 @@ public class LogosServlet extends AbstractShibbolethServlet {
 		output.close();
 	}
 
-	private byte[] getLogoData(final String info) {
-		final File file = new File(logoCache, info);
+	/**
+	 * Obtains a logo from the cache, reading it from disk if necessary. If the
+	 * file doesn't exist, returns the generic logo instead.
+	 * 
+	 * @param filename
+	 *            filename of the logo
+	 * @return the logo as a byte array, or the generic logo (as a byte array)
+	 *         on failure
+	 */
+	private byte[] getLogo(final String filename) {
+		try {
+			return cache.get(filename);
+		} catch (final ExecutionException e) {
+			LOGGER.log(Level.WARNING, "cannot read logo " + filename, e);
+			return generic;
+		}
+	}
+
+	/**
+	 * Reads a logo from disk.
+	 * 
+	 * @param filename
+	 *            filename of the logo
+	 * @return the logo as a byte array
+	 * @throws IOException
+	 *             if the file doesn't exist or cannot be read
+	 */
+	protected byte[] getLogoData(final String filename) throws IOException {
+		final File file = new File(logoCache, filename);
 		if (!file.exists() || file.length() == 0)
 			// empty files are used to mark logos that exist, but cannot be
 			// converted
 			return generic;
 
-		try {
-			final InputStream in = new FileInputStream(file);
-			final byte[] bytes = ByteStreams.toByteArray(in);
-			in.close();
-			return bytes;
-		} catch (final IOException e) {
-			LOGGER.log(Level.WARNING, "cannot read logo " + info, e);
-			return generic;
-		}
+		final InputStream in = new FileInputStream(file);
+		final byte[] bytes = ByteStreams.toByteArray(in);
+		in.close();
+		return bytes;
 	}
 }

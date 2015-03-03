@@ -9,13 +9,22 @@ import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
 
+import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 import de.uniKonstanz.shib.disco.util.ReconnectingStatement;
 
-class DatabaseWorkerThread extends Thread {
+/**
+ * Background threads for {@link LoginServlet} that asynchronously pushes the
+ * collected counts to the database.
+ */
+public class DatabaseWorkerThread extends Thread {
 	private static final Logger LOGGER = Logger
 			.getLogger(DatabaseWorkerThread.class.getCanonicalName());
 	private final BlockingQueue<Entry<LoginTuple, Counter>> updateQueue = new LinkedBlockingQueue<Entry<LoginTuple, Counter>>();
+	/**
+	 * Queue shutdown marker. Because Java doesn't provide one, and using
+	 * <code>null</code> isn't allowed.
+	 */
 	private static final Entry<LoginTuple, Counter> END = new Entry<LoginTuple, Counter>() {
 		public Counter setValue(final Counter value) {
 			throw new UnsupportedOperationException();
@@ -32,6 +41,12 @@ class DatabaseWorkerThread extends Thread {
 	private final ReconnectingDatabase db;
 	private final ReconnectingStatement stmt;
 
+	/**
+	 * @param db
+	 *            the {@link ReconnectingDatabase} to push values to
+	 * @throws ServletException
+	 *             if the database statement cannot be prepared
+	 */
 	public DatabaseWorkerThread(final ReconnectingDatabase db)
 			throws ServletException {
 		super("login database worker");
@@ -39,18 +54,34 @@ class DatabaseWorkerThread extends Thread {
 		try {
 			stmt = new ReconnectingStatement(db, "insert into"
 					+ " loginstats(iphash, entityid, count, created)"
-					+ " values(?, ?, ?, current_timestamp)");
+					+ " values(?, ?, ?, ?)");
 		} catch (final SQLException e) {
 			LOGGER.log(Level.SEVERE, "cannot prepare database statement", e);
 			throw new ServletException("cannot connect to database");
 		}
 	}
 
-	public void enqueue(final Entry<LoginTuple, Counter> notification) {
-		// if this fails, we lose a count
-		updateQueue.offer(notification);
+	/**
+	 * Enqueues a counter for upload to the database.
+	 * 
+	 * @param count
+	 *            the {@link LoginTuple} and {@link Counter} describing the
+	 *            count
+	 */
+	public void enqueue(final Entry<LoginTuple, Counter> count) {
+		// if this fails, we lose a count. that's better than blocking the
+		// request.
+		updateQueue.offer(count);
 	}
 
+	/**
+	 * Terminates the background thread. If possible, this will shut it down
+	 * gracefully, after uploading any counts waiting in the queue. Will block
+	 * until the queue has been shut down.
+	 * 
+	 * If something goes wrong, kills the thread directly, losing counts, and
+	 * returns immediately.
+	 */
 	public void shutdown() {
 		try {
 			updateQueue.put(END);
@@ -82,6 +113,10 @@ class DatabaseWorkerThread extends Thread {
 		db.close();
 	}
 
+	/**
+	 * Pushes a single counter to the database, retrying the database operations
+	 * if necessary.
+	 */
 	private void updateCount(final Entry<LoginTuple, Counter> counter) {
 		try {
 			tryUpdateCount(counter);
@@ -107,12 +142,14 @@ class DatabaseWorkerThread extends Thread {
 		}
 	}
 
+	/** No-retrying database helper method. */
 	private void tryUpdateCount(final Entry<LoginTuple, Counter> counter)
 			throws SQLException {
 		stmt.prepareStatement();
 		stmt.setInt(1, counter.getKey().getIpHash());
 		stmt.setString(2, counter.getKey().getEntityID());
 		stmt.setInt(3, counter.getValue().get());
+		stmt.setInt(4, AbstractShibbolethServlet.getCurrentDay());
 		stmt.executeUpdate();
 	}
 }

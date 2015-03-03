@@ -21,13 +21,27 @@ import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
 import de.uniKonstanz.shib.disco.logo.LogosServlet;
 import de.uniKonstanz.shib.disco.util.HTTP;
 
+/**
+ * Background thread that periodically downloads the DiscoFeed and updates IdP
+ * metadata from it. This also initiates the asynchronous logo download running
+ * in {@link LogoUpdaterThread}.
+ */
 public class MetadataUpdateThread extends Thread {
 	private static final Logger LOGGER = Logger
 			.getLogger(MetadataUpdateThread.class.getCanonicalName());
 	private final String feedURL;
 	private final LogoConverter converter;
 	private Map<String, IdPMeta> metadata;
+	private List<IdPMeta> allMetadata;
 
+	/**
+	 * @param discoFeed
+	 *            URL of Shibboleth DiscoFeed
+	 * @param logoDir
+	 *            logo cache directory
+	 * @throws ServletException
+	 *             if the logo cache directory cannot be created
+	 */
 	public MetadataUpdateThread(final String discoFeed, final File logoDir)
 			throws ServletException {
 		super("metadata updater");
@@ -46,8 +60,16 @@ public class MetadataUpdateThread extends Thread {
 
 			try {
 				if (success)
+					// shibboleth generally updates its metadata every hour, so
+					// it doesn't make sense to update it much more frequently.
+					// rationale for 15 minutes is to not delay metadata updates
+					// by another hour (worst case).
 					Thread.sleep(15 * 60 * 1000);
 				else
+					// retry very quickly on failure. this assumes that errors
+					// are caused by shibboleth restarts, but if shibboleth
+					// isn't running or unreachable, the discovery is broken
+					// anyway.
 					Thread.sleep(1 * 60 * 1000);
 			} catch (final InterruptedException e) {
 				break;
@@ -55,6 +77,11 @@ public class MetadataUpdateThread extends Thread {
 		}
 	}
 
+	/**
+	 * Performs the metadata update.
+	 * 
+	 * @return <code>false</code> if metadata download fails
+	 */
 	private boolean updateMetadata() {
 		final List<IdP> idps;
 		try {
@@ -66,6 +93,7 @@ public class MetadataUpdateThread extends Thread {
 			return false;
 		}
 
+		// convert from IdP to IdPMeta and start asynchronous logo download
 		final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>();
 		for (final IdP idp : idps) {
 			final String entityID = idp.getEntityID();
@@ -85,9 +113,23 @@ public class MetadataUpdateThread extends Thread {
 		}
 
 		metadata = map;
+		// pre-sort the list of all known IdPs. avoids sorting it for every
+		// request.
+		final List<IdPMeta> list = new ArrayList<IdPMeta>(map.size());
+		addMetadata(list, metadata.keySet());
+		Collections.sort(list);
+		allMetadata = list;
 		return true;
 	}
 
+	/**
+	 * Gets metadata for a particular IdP, given its entityID. Returns
+	 * <code>null</code> if this IdP is unknown.
+	 * 
+	 * @param entityID
+	 *            identifies the IdP
+	 * @return corresponding {@link IdPMeta} object, or <code>null</code>
+	 */
 	public IdPMeta getMetadata(final String entityID) {
 		final Map<String, IdPMeta> map = metadata;
 		if (map == null)
@@ -95,6 +137,14 @@ public class MetadataUpdateThread extends Thread {
 		return map.get(entityID);
 	}
 
+	/**
+	 * Obtains metadata for a list of IdP, identified by their entityIDs.
+	 * 
+	 * @param list
+	 *            return value; entries are appended to this list
+	 * @param entities
+	 *            list of entityIDs for IdPs
+	 */
 	public void addMetadata(final Collection<IdPMeta> list,
 			final Collection<String> entities) {
 		final Map<String, IdPMeta> map = metadata;
@@ -110,13 +160,15 @@ public class MetadataUpdateThread extends Thread {
 		}
 	}
 
+	/**
+	 * Obtains a sorted list of all known IdPs. Never returns <code>null</code>,
+	 * but may return an empty list.
+	 * 
+	 * @return sorted list of {@link IdPMeta}s
+	 */
 	public List<IdPMeta> getAllMetadata() {
-		if (metadata == null)
+		if (allMetadata == null)
 			return Collections.emptyList();
-
-		final List<IdPMeta> list = new ArrayList<IdPMeta>();
-		addMetadata(list, metadata.keySet());
-		Collections.sort(list);
-		return list;
+		return allMetadata;
 	}
 }

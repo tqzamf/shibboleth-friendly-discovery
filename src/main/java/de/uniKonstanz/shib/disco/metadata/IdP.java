@@ -6,6 +6,9 @@ import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.annotate.JsonProperty;
 
+/**
+ * Data class to hold IdP metadata deserialized form the JSON DiscoFeed.
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class IdP {
 	@JsonProperty
@@ -15,6 +18,11 @@ public class IdP {
 	@JsonProperty("Logos")
 	public List<ImageAttr> logos;
 
+	/**
+	 * Gets the logo with the largest declared size, if there are any logos.
+	 * 
+	 * @return the largest logo, or <code>null</code> if none
+	 */
 	@JsonIgnore
 	public String getBiggestLogo() {
 		if (logos != null && !logos.isEmpty()) {
@@ -31,6 +39,15 @@ public class IdP {
 		return null;
 	}
 
+	/**
+	 * Gets the display name in the given language, or in just about any
+	 * language if none is declared in the requested language. If no display
+	 * name is declared at all, uses the entityID instead.
+	 * 
+	 * @param language
+	 *            requested language for display name, lowercase
+	 * @return the display name, or <code>null</code> if none
+	 */
 	@JsonIgnore
 	public String getDisplayName(final String language) {
 		if (displayNames != null) {
@@ -50,6 +67,7 @@ public class IdP {
 		return entityID;
 	}
 
+	@JsonIgnore
 	public String getEntityID() {
 		return entityID;
 	}

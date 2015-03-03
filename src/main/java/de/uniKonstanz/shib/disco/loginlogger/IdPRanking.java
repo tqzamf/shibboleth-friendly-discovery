@@ -19,6 +19,10 @@ import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 import de.uniKonstanz.shib.disco.util.ReconnectingStatement;
 
+/**
+ * Handles loading ranked lists of IdPs from the database. Results are cached
+ * for 1 hour to keep the number of database queries down.
+ */
 public class IdPRanking {
 	private static final Logger LOGGER = Logger.getLogger(IdPRanking.class
 			.getCanonicalName());
@@ -27,6 +31,14 @@ public class IdPRanking {
 	private final int numIdPs;
 	private ReconnectingStatement globalStmt;
 
+	/**
+	 * @param db
+	 *            the {@link ReconnectingDatabase} to load data from
+	 * @param numIdPs
+	 *            number of IdPs to return for each query
+	 * @throws ServletException
+	 *             if the database statement cannot be prepared
+	 */
 	public IdPRanking(final ReconnectingDatabase db, final int numIdPs)
 			throws ServletException {
 		this.numIdPs = numIdPs;
@@ -52,10 +64,20 @@ public class IdPRanking {
 				});
 	}
 
+	/**
+	 * Gets the {@link #numIdPs} globally most popular IdPs.
+	 * 
+	 * @return list of up to {@link #numIdPs} entityIDs
+	 */
 	public List<String> getGlobalIdPList() {
-		return getIdPList(-1);
+		return getIdPList(AbstractShibbolethServlet.NETHASH_UNDEFINED);
 	}
 
+	/**
+	 * Gets the {@link #numIdPs} most popular IdPs for the given network hash.
+	 * 
+	 * @return list of up to {@link #numIdPs} entityIDs
+	 */
 	public List<String> getIdPList(final int nethash) {
 		try {
 			return cache.get(nethash);
@@ -69,6 +91,16 @@ public class IdPRanking {
 		}
 	}
 
+	/**
+	 * Obtains the list of IdPs for the given network hash from the database,
+	 * retrying if necessary.
+	 * 
+	 * @param nethash
+	 *            client network hash
+	 * @return up to 6 entityIDs
+	 * @throws SQLException
+	 *             on database errors
+	 */
 	private List<String> loadIdPList(final int nethash) throws SQLException {
 		try {
 			return tryGetIdPList(nethash);
@@ -92,8 +124,9 @@ public class IdPRanking {
 		}
 	}
 
+	/** Non-retrying database helper method. */
 	private List<String> tryGetIdPList(final int nethash) throws SQLException {
-		if (nethash == -1)
+		if (nethash == AbstractShibbolethServlet.NETHASH_UNDEFINED)
 			synchronized (globalStmt) {
 				globalStmt.prepareStatement();
 				return toList(globalStmt);
@@ -106,6 +139,10 @@ public class IdPRanking {
 			}
 	}
 
+	/**
+	 * Executes a statement and returns up to {@link #numIdPs} {@link String}
+	 * results as a list.
+	 */
 	private List<String> toList(final ReconnectingStatement statement)
 			throws SQLException {
 		final ResultSet res = statement.executeQuery();

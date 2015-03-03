@@ -16,6 +16,11 @@ import org.apache.http.client.utils.URLEncodedUtils;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 
+/**
+ * Represents a combination of shibboleth login URL and login target URL, parsed
+ * from a {@link HttpServletRequest} with
+ * {@link #parse(HttpServletRequest, String, String)}.
+ */
 public class LoginParams {
 	private static final Charset UTF8 = Charset.forName("UTF-8");
 	private static final Logger LOGGER = Logger.getLogger(LoginParams.class
@@ -25,13 +30,20 @@ public class LoginParams {
 	private final String encodedLogin;
 	private final String encodedTarget;
 
-	public LoginParams(final String login, final String target) {
+	/**
+	 * @param login
+	 *            shibboleth login URL
+	 * @param target
+	 *            login target URL
+	 */
+	private LoginParams(final String login, final String target) {
 		this.login = login;
 		this.target = target;
 		encodedLogin = encode(login);
 		encodedTarget = encode(target);
 	}
 
+	/** URL-encodes a string for inclusion in query parameters. */
 	private static String encode(final String value) {
 		try {
 			return URLEncoder.encode(value, AbstractShibbolethServlet.ENCODING);
@@ -41,22 +53,74 @@ public class LoginParams {
 		}
 	}
 
+	/**
+	 * Gets the login URL in plain, unencoded format. This is unsafe to pass in
+	 * query parameters.
+	 * 
+	 * @return shibboleth login URL
+	 */
 	public String getLogin() {
 		return login;
 	}
 
+	/**
+	 * Gets the login URL, URL-encoded so it is safe to pass in query
+	 * parameters.
+	 * 
+	 * @return shibboleth login URL
+	 */
 	public String getEncodedLogin() {
 		return encodedLogin;
 	}
 
+	/**
+	 * Gets the target URL, URL-encoded so it is safe to pass in query
+	 * parameters.
+	 * 
+	 * @return login target URL
+	 */
 	public String getEncodedTarget() {
 		return encodedTarget;
 	}
 
+	/**
+	 * Determines whether the target will remain valid beyond the lifetime of
+	 * the current shibboleth session. If it is an entityID, then it is likely
+	 * to remain valid. Conversely, the {@code ss:mem:*} scheme is known to stop
+	 * working after the current shibboleth session has ended, so links
+	 * containing such targets should not be bookmarked.
+	 * 
+	 * @return <code>true</code> if it is sensible to bookmark a link to this
+	 *         target
+	 */
 	public boolean canBookmark() {
+		// note: for simplicity, assumes that all entityIDs are HTTP or HTTPS
+		// URLs
 		return target.startsWith("http://") || target.startsWith("https://");
 	}
 
+	/**
+	 * Obtains the shibboleth login URL and login target URL for an
+	 * {@link HttpServletRequest}. Uses, in order of prefererence:
+	 * <ol>
+	 * <li>the explicit {@code login} and {@code target} URL parameters, if
+	 * present
+	 * <li>login and target parsed from shibboleth's {@code return} parameter,
+	 * if present
+	 * <li>the configured default login and target URLs
+	 * </ol>
+	 * 
+	 * @param req
+	 *            the client request
+	 * @param defaultTarget
+	 *            configured default target URL, or <code>null</code> if none
+	 *            configured
+	 * @param defaultLogin
+	 *            configured default login URL, or <code>null</code> if none
+	 *            configured
+	 * @return the {@link LoginParams} describing the combination, or
+	 *         <code>null</code> if no defaults are configured
+	 */
 	public static LoginParams parse(final HttpServletRequest req,
 			final String defaultTarget, final String defaultLogin) {
 		// Shibboleth adds its "return=" parameter to every discovery request.
@@ -91,6 +155,10 @@ public class LoginParams {
 		return new LoginParams(login, target);
 	}
 
+	/**
+	 * Helper method to get an explicit URL parameter, or one form the
+	 * {@code return} parameters, or the default, or <code>null</code>.
+	 */
 	private static String getParameter(final HttpServletRequest req,
 			final String name, final String fallback, final String deflt)
 			throws NoSuchElementException {
@@ -101,13 +169,13 @@ public class LoginParams {
 		// the discovery URL, but Shibboleth cannot be told to omit the
 		// "return=" parameter.
 		final String param = req.getParameter(name);
-		if (param != null)
+		if (param != null && !param.isEmpty())
 			return param;
 		// use the value from "return=" parameter next, or the default if one is
 		// given.
-		if (fallback != null)
+		if (fallback != null && !fallback.isEmpty())
 			return fallback;
-		if (deflt != null)
+		if (deflt != null & !deflt.isEmpty())
 			return deflt;
 		// if there is no default, we have a missing parameter
 		return null;

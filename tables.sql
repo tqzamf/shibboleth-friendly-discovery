@@ -1,7 +1,8 @@
 create table loginstats(
-	iphash integer,
-	entityid varchar(255),
-	count integer,
-	created timestamp);
+	iphash integer not null,
+	entityid varchar(255) not null,
+	count integer not null,
+	created integer not null);
 create index loginstats_entityid
 	on loginstats(iphash, entityid);
+grant select, insert, delete on loginstats to shibdisco;

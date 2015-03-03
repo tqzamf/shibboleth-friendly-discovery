@@ -25,10 +25,6 @@ import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-
-import javax.imageio.ImageIO;
 
 /**
  * Identification icon generator. Aka. carpet maker because the result looks
@@ -215,12 +211,5 @@ public class IdentIcon {
 		g.drawImage(img, 2 * w, 2 * h, -w, -h, null);
 		g.dispose();
 		return dup;
-	}
-
-	public static byte[] getBytes(final BufferedImage img) throws IOException {
-		final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-		if (!ImageIO.write(img, "png", buffer))
-			throw new IOException("cannot convert to PNG");
-		return buffer.toByteArray();
 	}
 }

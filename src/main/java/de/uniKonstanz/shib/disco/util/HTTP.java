@@ -3,12 +3,14 @@ package de.uniKonstanz.shib.disco.util;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.URLConnection;
 import java.nio.charset.Charset;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
+import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.NoConnectionReuseStrategy;
@@ -19,6 +21,10 @@ import org.apache.http.impl.client.LaxRedirectStrategy;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
 
+/**
+ * Wrapper around {@link HttpClient}, with sensible timeouts for every
+ * operation. Unlike {@link URLConnection}, this cannot hang forever.
+ */
 public class HTTP {
 	/** Time until the request has to be completed: 1 minute. */
 	private static final long TIMEOUT = 60 * 1000;
@@ -79,6 +85,7 @@ public class HTTP {
 		}
 	}
 
+	/** Encoding helper; uses declared encoding or defaults to UTF-8. */
 	private static Charset getContentEncoding(final HttpEntity entity) {
 		final Header encoding = entity.getContentEncoding();
 		if (encoding != null && encoding.getValue() != null)
@@ -111,6 +118,7 @@ public class HTTP {
 		}
 	}
 
+	/** Request helper; throw {@link IOException} on non-200 response. */
 	private static HttpEntity performRequest(final HttpGet req)
 			throws IOException {
 		// perform HTTP request

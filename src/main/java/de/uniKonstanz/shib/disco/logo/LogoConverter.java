@@ -23,26 +23,48 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
-import de.uniKonstanz.shib.disco.metadata.InconvertibleLogoException;
 import de.uniKonstanz.shib.disco.util.HTTP;
 
+/**
+ * Converts logos for use in the IdP buttons. This means scaling them to a
+ * constant size and replacing white backggrounds with transparency. If a logo
+ * cannot be downloaded, uses {@link IdentIcon} to generate a random unique logo
+ * from the hashed entityID.
+ */
 public class LogoConverter {
 	private static final Logger LOGGER = Logger.getLogger(LogoConverter.class
 			.getCanonicalName());
+	/**
+	 * Maximum acceptable filesize for an IdP logo. Anything larger is assumed
+	 * to be an error, either on the server, or by the operator.
+	 */
 	private static final int MAX_LOGO_SIZE = 500000;
+	/**
+	 * Output logo width, without 1px border. If the aspect ratio changes, the
+	 * CSS has to be adjusted.
+	 */
 	private static final int LOGO_WIDTH = 300 - 2;
+	/**
+	 * Output logo height, without 1px border. If the aspect ratio changes, the
+	 * CSS has to be adjusted.
+	 */
 	private static final int LOGO_HEIGHT = 150 - 2;
 	private final File logoDir;
 	private final LoadingCache<String, File> cache;
 	private IdentIcon ident;
 
+	/**
+	 * @param logoDir
+	 *            logo cache directory where files are created
+	 */
 	public LogoConverter(final File logoDir) {
 		this.logoDir = logoDir;
-		// cache URL-to-filename mapping for a day. this avoids downloading the
-		// logo more than once a day, only to check that it's still the same
-		// file. this means that changing the IdP logo can take up to a day to
-		// apply, but it shouldn't change frequently in any case.
-		cache = CacheBuilder.newBuilder().expireAfterAccess(1, TimeUnit.DAYS)
+		// cache URL-to-filename mapping for a few hours. this avoids
+		// downloading the logo more than a few times a day, only to check that
+		// it's still the same file. this means that changing the IdP logo can
+		// take a while to apply, but those logos shouldn't change frequently in
+		// any case.
+		cache = CacheBuilder.newBuilder().expireAfterAccess(6, TimeUnit.HOURS)
 				.maximumSize(AbstractShibbolethServlet.MAX_IDPS)
 				.build(new CacheLoader<String, File>() {
 					@Override
@@ -54,6 +76,16 @@ public class LogoConverter {
 		ident = new IdentIcon(37, 4, 2);
 	}
 
+	/**
+	 * Tries to read and convert the logo from the given URL, writing the
+	 * resulting file into {@link #logoDir} named after a hash of its contents,
+	 * and returning it as a {@link File}. Returns <code>null</code> if anything
+	 * goes wrong.
+	 * 
+	 * @param url
+	 *            URL to load the logo from
+	 * @return the filename relative to {@link #logoDir}, or <code>null</code>
+	 */
 	public File getLogo(final String url) {
 		try {
 			return cache.get(url);
@@ -71,9 +103,20 @@ public class LogoConverter {
 		}
 	}
 
-	public File getFallbackLogo(final String url) {
+	/**
+	 * Generates a "logo" from the hashed entityID, writes it to a file in
+	 * {@link #logoDir} named after a hash of the entityID, and returns that
+	 * file as a {@link File}. The generated logo is unique with overwhelming
+	 * probability.
+	 * 
+	 * @param entityID
+	 *            entityID of the IdP
+	 * @return the filename relative to {@link #logoDir}, or <code>null</code>
+	 *         if there is a serious error
+	 */
+	public File getFallbackLogo(final String entityID) {
 		try {
-			final String checksum = DigestUtils.shaHex(url);
+			final String checksum = DigestUtils.shaHex(entityID);
 			final File file = new File(logoDir, "i" + checksum + ".png");
 			if (file.exists() && file.length() > 0)
 				return file;
@@ -89,11 +132,22 @@ public class LogoConverter {
 			// fallback logo generation is pretty failsafe; if anything does go
 			// wrong, that's a major issue → long warning
 			LOGGER.log(Level.WARNING, "cannot generate fallback icon for "
-					+ url, e.getCause());
+					+ entityID, e.getCause());
 			return null;
 		}
 	}
 
+	/**
+	 * Downloads and converts a logo.
+	 * 
+	 * @param url
+	 *            source URL
+	 * @return {@link File} that the result was written to
+	 * @throws IOException
+	 *             if writing to the {@link #logoDir} fails
+	 * @throws InconvertibleLogoException
+	 *             if download or conversion of the logo fails
+	 */
 	private File convertLogo(final String url) throws IOException,
 			InconvertibleLogoException {
 		final byte[] bytes = readLogo(url);
@@ -133,6 +187,16 @@ public class LogoConverter {
 		}
 	}
 
+	/**
+	 * Downloads the logo, with strict timeouts. Retries over HTTP if HTTPS
+	 * fails due to IdP operator incompetence.
+	 * 
+	 * @param url
+	 *            source URL
+	 * @return logo as a byte array
+	 * @throws InconvertibleLogoException
+	 *             if download fails
+	 */
 	private static byte[] readLogo(final String url)
 			throws InconvertibleLogoException {
 		try {
@@ -163,6 +227,12 @@ public class LogoConverter {
 		}
 	}
 
+	/**
+	 * Creates an empty flag file to mark a logo as inconvertible.
+	 * 
+	 * @param file
+	 *            file to generate
+	 */
 	private static void markInconvertible(final File file) {
 		try {
 			// logo cannot be converted. trying again on the same,
@@ -175,6 +245,18 @@ public class LogoConverter {
 		}
 	}
 
+	/**
+	 * Replaces white pixels with transparency.
+	 * 
+	 * @param bytes
+	 *            input image as a byte array
+	 * @param outputFile
+	 *            {@link File} to write the result
+	 * @throws IOException
+	 *             if writing fails
+	 * @throws InconvertibleLogoException
+	 *             if the input cannot be read as an image
+	 */
 	private static void whiteToTransparency(final byte[] bytes,
 			final File outputFile) throws IOException,
 			InconvertibleLogoException {
@@ -201,6 +283,15 @@ public class LogoConverter {
 		writeTo(buffer, outputFile);
 	}
 
+	/**
+	 * Replaces white pixels with transparency.
+	 * 
+	 * @param image
+	 *            {@link BufferedImage} containing the input image, in any color
+	 *            space
+	 * @return {@link BufferedImage} containing the input image, in ARGB color
+	 *         space ({@link BufferedImage#TYPE_INT_ARGB}).
+	 */
 	private static BufferedImage whiteToTransparency(final BufferedImage image) {
 		// calculate scaling factor to fit into a standard 275x150 rectangle
 		final float fX = image.getWidth() / (float) LOGO_WIDTH;
@@ -253,10 +344,24 @@ public class LogoConverter {
 		return buffer;
 	}
 
+	/**
+	 * Writes a {@link BufferedImage} to a file. Makes sure that all parent
+	 * directories exist.
+	 * 
+	 * @param buffer
+	 *            {@link BufferedImage} to write
+	 * @param outputFile
+	 *            {@link File} to create or overwrite
+	 * @throws IOException
+	 *             on failure
+	 */
 	private static void writeTo(final BufferedImage buffer,
 			final File outputFile) throws IOException {
-		final File temp = new File(outputFile.getParent(), outputFile.getName()
-				+ ".tmp");
+		// make sure parent directory exists. expected to fail almost always
+		// because the directory already exists.
+		outputFile.getParentFile().mkdirs();
+		final File temp = new File(outputFile.getParentFile(),
+				outputFile.getName() + ".tmp");
 		temp.delete();
 		if (!ImageIO.write(buffer, "png", temp))
 			throw new IOException("cannot convert to PNG");

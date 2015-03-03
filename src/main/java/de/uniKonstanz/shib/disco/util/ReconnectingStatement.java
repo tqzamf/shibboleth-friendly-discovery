@@ -6,6 +6,15 @@ import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+/**
+ * {@link PreparedStatement} wrapper with some logic to simplify retries on
+ * {@link SQLException}.
+ * 
+ * Not thread safe, simply because the
+ * {@link PreparedStatement#setObject(int, Object)} API has inherent race
+ * conditions. Use appropriate locking so that only one thread accesses this
+ * object at a time.
+ */
 public class ReconnectingStatement {
 	private static final Logger LOGGER = Logger
 			.getLogger(ReconnectingStatement.class.getCanonicalName());
@@ -13,6 +22,14 @@ public class ReconnectingStatement {
 	private final String query;
 	private PreparedStatement stmt;
 
+	/**
+	 * @param db
+	 *            the {@link ReconnectingDatabase}
+	 * @param query
+	 *            sql statement for {@link PreparedStatement}
+	 * @throws SQLException
+	 *             if the statement is invalid
+	 */
 	public ReconnectingStatement(final ReconnectingDatabase db,
 			final String query) throws SQLException {
 		this.db = db;
@@ -22,6 +39,14 @@ public class ReconnectingStatement {
 		prepareStatement();
 	}
 
+	/**
+	 * Prepares the statement. If a database error occurs, retries once. This
+	 * catches the common case where the database connection was broken or the
+	 * database was restarted.
+	 * 
+	 * @throws SQLException
+	 *             if the second retry fails
+	 */
 	public void prepareStatement() throws SQLException {
 		if (stmt != null)
 			return;
@@ -45,6 +70,7 @@ public class ReconnectingStatement {
 		stmt = tryPrepareStatement();
 	}
 
+	/** Non-retrying {@link PreparedStatement} helper. */
 	private PreparedStatement tryPrepareStatement() throws SQLException {
 		try {
 			return db.getConnection().prepareStatement(query);
@@ -54,17 +80,23 @@ public class ReconnectingStatement {
 		}
 	}
 
+	/** Wraps {@link PreparedStatement#setInt(int, int)}. */
 	public void setInt(final int index, final int value) throws SQLException {
 		checkPrepared();
 		stmt.setInt(index, value);
 	}
 
+	/** Wraps {@link PreparedStatement#setString(int, String)}. */
 	public void setString(final int index, final String value)
 			throws SQLException {
 		checkPrepared();
 		stmt.setString(index, value);
 	}
 
+	/**
+	 * Wraps {@link PreparedStatement#executeUpdate()}, but also closes the
+	 * database connection on failure.
+	 */
 	public void executeUpdate() throws SQLException {
 		checkPrepared();
 		try {
@@ -83,11 +115,10 @@ public class ReconnectingStatement {
 		}
 	}
 
-	private void checkPrepared() {
-		if (stmt == null)
-			throw new IllegalStateException("statement not prepared!");
-	}
-
+	/**
+	 * Wraps {@link PreparedStatement#executeQuery()}, but also closes the
+	 * database connection on failure.
+	 */
 	public ResultSet executeQuery() throws SQLException {
 		checkPrepared();
 		try {
@@ -104,5 +135,14 @@ public class ReconnectingStatement {
 			stmt = null;
 			throw e;
 		}
+	}
+
+	/**
+	 * Throws {@link IllegalStateException} if the statement wasn't prepared
+	 * before a call to {@link #executeQuery()} or {@link #executeUpdate()}.
+	 */
+	private void checkPrepared() {
+		if (stmt == null)
+			throw new IllegalStateException("statement not prepared!");
 	}
 }

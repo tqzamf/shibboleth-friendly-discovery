@@ -17,25 +17,39 @@ import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
-import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 
+/**
+ * Logs login requests, then redirects to the actual shibboleth login URL.
+ * Counts are aggregating for 10 minutes and uploaded in batch to keep database
+ * load down.
+ * 
+ * Doesn't distinguish between successful and unsuccessful login requests,
+ * because doing so would require intercepting the login request after the IdP
+ * has verified the user's credentials, which the discovery host isn't supposed
+ * to do. Thus a user can mess up the statistics by sending thousands of
+ * requests, but he will mostly affect his own network, and only for the next 30
+ * days.
+ */
 @SuppressWarnings("serial")
 public class LoginServlet extends AbstractShibbolethServlet {
-	public static final String IDP_COOKIE = "shibboleth-discovery";
-	private static final int COOKIE_LIFETIME = 60 * 60 * 24 * 365;
 	private static final Logger LOGGER = Logger.getLogger(LoginServlet.class
 			.getCanonicalName());
-	private ReconnectingDatabase db;
+	/** Cookie name. Uses the common reserved namespace. */
+	public static final String IDP_COOKIE = "shibboleth-discovery";
+	/** Make the cookie last for a year before it spoils. */
+	private static final int COOKIE_LIFETIME = 60 * 60 * 24 * 365;
 	public String defaultTarget;
 	private LoadingCache<LoginTuple, Counter> counter;
-	DatabaseWorkerThread updateThread;
+	private DatabaseWorkerThread updateThread;
 	private String webRoot;
 	private String defaultLogin;
+	private DatabaseCleanupThread cleanupThread;
 
 	@Override
 	public void init() throws ServletException {
-		db = getDatabaseConnection();
-		updateThread = new DatabaseWorkerThread(db);
+		updateThread = new DatabaseWorkerThread(getDatabaseConnection());
+		// note: separate database; they cannot be shared safely
+		cleanupThread = new DatabaseCleanupThread(getDatabaseConnection());
 
 		webRoot = getWebRoot();
 		defaultTarget = getContextDefaultParameter("target");
@@ -44,6 +58,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 			LOGGER.warning("shibboleth login URL isn't absolute or non-SSL: "
 					+ defaultLogin);
 
+		// cache abused as a way of aggregating counts for 10 minutes
 		counter = CacheBuilder.newBuilder()
 				.expireAfterWrite(10, TimeUnit.MINUTES)
 				.maximumSize(AbstractShibbolethServlet.MAX_IDPS)
@@ -59,12 +74,15 @@ public class LoginServlet extends AbstractShibbolethServlet {
 					}
 				});
 		updateThread.start();
+		cleanupThread.start();
 	}
 
 	@Override
 	public void destroy() {
+		// push all counts in memory to the database before terminating
 		counter.invalidateAll();
 		updateThread.shutdown();
+		cleanupThread.shutdown();
 	}
 
 	@Override

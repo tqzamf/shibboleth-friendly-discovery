@@ -17,14 +17,42 @@ import com.google.common.net.InetAddresses;
 
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 
+/**
+ * Methods common to all servlets.
+ */
 @SuppressWarnings("serial")
 public abstract class AbstractShibbolethServlet extends HttpServlet {
-	public static final int MAX_IDPS = 1000;
-	public static final String ENCODING = "UTF-8";
-	public static final String LANGUAGE = "en";
 	private static final Logger LOGGER = Logger
 			.getLogger(AbstractShibbolethServlet.class.getCanonicalName());
+	public static final int NETHASH_UNDEFINED = -1;
+	/** Default encoding. Anything other than UTF-8 doesn't make sense nowadays. */
+	public static final String ENCODING = "UTF-8";
+	/**
+	 * Number of supported IdPs. It will handle more, but performance will
+	 * suffer. If set to a value that is too large, memory consumption can
+	 * become excessive.
+	 * 
+	 * 1000 was chosen because at that point, usability will already suffer
+	 * severely because of the long page for full discovery, so it makes sense
+	 * to choose a different discovery provider instead of raising the limit.
+	 */
+	public static final int MAX_IDPS = 1000;
+	/**
+	 * Preferred language for IdP DisplayNames. Note that changing the UI
+	 * language requires changing the resources, and thus requires recompiling
+	 * the wabapp anyway.
+	 */
+	public static final String LANGUAGE = "en";
 
+	/**
+	 * Get a parameter from {@link ServletContext}.
+	 * 
+	 * @param name
+	 *            name of parameter
+	 * @return value of parameter
+	 * @throws ServletException
+	 *             if the named parameter doesn't exist
+	 */
 	protected String getContextParameter(final String name)
 			throws ServletException {
 		final String value = getServletContext().getInitParameter(name);
@@ -33,6 +61,34 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 		return value;
 	}
 
+	/**
+	 * Get a parameter from {@link ServletContext}, mapping the empty string to
+	 * <code>null</code>.
+	 * 
+	 * @param suffix
+	 *            name suffix of parameter, appended to
+	 *            {@code "shibboleth.default."}
+	 * @return value of parameter, or <code>null</code> if the value is
+	 *         <code>""</code>
+	 * @throws ServletException
+	 *             if the named parameter doesn't exist
+	 */
+	protected String getContextDefaultParameter(final String suffix)
+			throws ServletException {
+		final String dflt = getContextParameter("shibboleth.default." + suffix);
+		if (dflt.isEmpty())
+			return null;
+		return dflt;
+	}
+
+	/**
+	 * Opens a database connection according to the configuration in the
+	 * {@link ServletContext}.
+	 * 
+	 * @return a {@link ReconnectingDatabase}
+	 * @throws ServletException
+	 *             if the required context parameters don't exist
+	 */
 	protected ReconnectingDatabase getDatabaseConnection()
 			throws ServletException {
 		final String jdbcDriver = getContextParameter("database.jdbc.driver");
@@ -59,6 +115,9 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 * hosts that are in different networks. This choice is heuristic because
 	 * network sizes vary.
 	 * 
+	 * The network hash is a positive integer between 0 and 65535, or
+	 * {@link #NETHASH_UNDEFINED} if the client's IP address cannot be parsed.
+	 * 
 	 * @param req
 	 *            the client's request
 	 * @return network hash
@@ -78,9 +137,15 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 					| ((addr[1] + addr[3] + addr[5]) & 0xff);
 		// WTF? IPv9 from RFC1606??
 		System.err.println("neither IPv4 nor IPv6: " + req.getRemoteAddr());
-		return -1;
+		return NETHASH_UNDEFINED;
 	}
 
+	/**
+	 * Get the location where logos are cached, in the servlet container's temp
+	 * directory.
+	 * 
+	 * @return a {@link File} pointing to the logo cache directory
+	 */
 	protected File getLogoCacheDir() {
 		final File tempdir = (File) getServletContext().getAttribute(
 				ServletContext.TEMPDIR);
@@ -88,34 +153,53 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 		return logoCache;
 	}
 
+	/**
+	 * Get the {@code "discovery.web.root"} context parameter, without trailing
+	 * slashes.
+	 * 
+	 * @return the {@code "discovery.web.root"} context parameter
+	 * @throws ServletException
+	 *             if the {@code "discovery.web.root"} context parameter doesn't
+	 *             exist
+	 */
 	protected String getWebRoot() throws ServletException {
-		final String webRoot = getContextParameter("discovery.web.root");
-		if (webRoot.endsWith("/"))
-			return webRoot.substring(0, webRoot.length() - 1);
-		return webRoot;
+		return getContextParameter("discovery.web.root")
+				.replaceFirst("/+$", "");
 	}
 
-	protected String getContextDefaultParameter(final String name)
-			throws ServletException {
-		final String dflt = getContextParameter("shibboleth.default." + name);
-		if (dflt.isEmpty())
-			return null;
-		return dflt;
+	/**
+	 * Gets the 24-hour interval containing the current time instant. This
+	 * doesn't have anything to do with the calendar day.
+	 * 
+	 * Used to work around inconsistent date handling among databases: there is
+	 * no standard way of doing arithmetic with dates that works across
+	 * databases, so we just use an integer and some local arithmetic instead.
+	 * 
+	 * @return the current day number as an integer
+	 */
+	public static int getCurrentDay() {
+		return (int) (System.currentTimeMillis() / 86400000);
 	}
 
-	protected static String getResourceAsString(final String resource)
+	/**
+	 * Reads a classpath resource into a {@code byte[]}.
+	 * 
+	 * @param resource
+	 *            name of the resource to read, relative to the
+	 *            {@link AbstractShibbolethServlet} class.
+	 * @return the resource as a {@code byte[]}
+	 * @throws ServletException
+	 *             if the resource doesn't exist
+	 */
+	protected static byte[] getResource(final String resource)
 			throws ServletException {
-		final InputStream in = DiscoveryServlet.class
+		final InputStream in = AbstractShibbolethServlet.class
 				.getResourceAsStream(resource);
-		if (in == null) {
-			LOGGER.severe("cannot find resource " + resource);
-			throw new ServletException("resource " + resource + " not found");
-		}
+		if (in == null)
+			throw new ServletException("missing resource " + resource);
 		try {
-			final byte[] bytes = ByteStreams.toByteArray(in);
-			return new String(bytes, ENCODING);
+			return ByteStreams.toByteArray(in);
 		} catch (final IOException e) {
-			LOGGER.log(Level.SEVERE, "cannot read resource " + resource, e);
 			throw new ServletException("cannot read resource " + resource);
 		} finally {
 			try {
@@ -124,6 +208,26 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 				LOGGER.log(Level.WARNING, "cannot close resource " + resource,
 						e);
 			}
+		}
+	}
+
+	/**
+	 * Reads a classpath resource into a {@link String}.
+	 * 
+	 * @param resource
+	 *            name of the resource to read, relative to the
+	 *            {@link AbstractShibbolethServlet} class.
+	 * @return the resource as a {@link String}
+	 * @throws ServletException
+	 *             if the resource doesn't exist
+	 */
+	protected static String getResourceAsString(final String resource)
+			throws ServletException {
+		try {
+			return new String(getResource(resource), ENCODING);
+		} catch (final IOException e) {
+			LOGGER.log(Level.SEVERE, "cannot read resource " + resource, e);
+			throw new ServletException("cannot read resource " + resource);
 		}
 	}
 }

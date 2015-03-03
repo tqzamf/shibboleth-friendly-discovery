@@ -1,9 +1,18 @@
 package de.uniKonstanz.shib.disco.loginlogger;
 
+/**
+ * A simple IdP-nethash tuple for logging of logins.
+ */
 public final class LoginTuple {
 	private final int ipHash;
 	private final String entityID;
 
+	/**
+	 * @param ipHash
+	 *            client network hash
+	 * @param entityID
+	 *            entityID of chose IdP
+	 */
 	public LoginTuple(final int ipHash, final String entityID) {
 		this.ipHash = ipHash;
 		this.entityID = entityID;

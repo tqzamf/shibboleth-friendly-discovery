@@ -21,6 +21,29 @@ import de.uniKonstanz.shib.disco.metadata.IdPMeta;
 import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 
+/**
+ * Handles the discovery itself, providing 3 flavors of discovery:
+ * <dl>
+ * <dt>{@code full}
+ * <dd>a list of all IdPs, along with a javascript-based search/filter box
+ * <dt>{@code friendly}
+ * <dd>the "most likely" IdPs for the user, and a link to the full discovery
+ * <dt>{@code embed}
+ * <dd>javascript code to embed the {@code friendly} discovery in a webpage; see
+ * {@link #buildEmbeddedDiscovery(HttpServletRequest, HttpServletResponse, LoginParams)}
+ * for details
+ * </dl>
+ * The "most likely" IdPs are, in order:
+ * <ol>
+ * <li>the last one he used, if any, as marked by a cookie named
+ * {@link LoginServlet#IDP_COOKIE}
+ * <li>the most popular ones for "his" network, as defined by
+ * {@link #getClientNetworkHash(HttpServletRequest)}
+ * <li>the globally most popular ones
+ * </ol>
+ * Up to {@code "discovery.friendly.idps"} (default 6) IdPs are shown in the
+ * {@code friendly} and {@code embed} styles.
+ */
 @SuppressWarnings("serial")
 public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private static final Logger LOGGER = Logger
@@ -61,6 +84,12 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		ranking = new IdPRanking(db, numTopIdPs);
 		meta = new MetadataUpdateThread(discoFeed, getLogoCacheDir());
 		meta.start();
+	}
+
+	@Override
+	public void destroy() {
+		meta.interrupt();
+		db.close();
 	}
 
 	/** Normalize whitespace. Not safe to use on untrusted data. */
@@ -105,6 +134,11 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 					"Discovery service " + pi.substring(1) + " does not exist.");
 	}
 
+	/**
+	 * Builds the {@code full} discovery. This is simply a list of all IdPs,
+	 * formatted as buttons with logos, and a search box to locate the right IdP
+	 * if there are many.
+	 */
 	private void buildFullDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
@@ -132,26 +166,11 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		out.close();
 	}
 
-	private void buildEmbeddedDiscovery(final HttpServletRequest req,
-			final HttpServletResponse resp, final LoginParams params)
-			throws IOException {
-		final List<IdPMeta> idps = getIdPList(req, resp);
-
-		final StringBuilder buffer = new StringBuilder();
-		buffer.append(jsHeader);
-		buffer.append("shibbolethDiscovery('").append(webRoot).append("','");
-		buildNotices(buffer, params);
-		for (final IdPMeta idp : idps)
-			buildHTML(buffer, idp, params);
-		buildOtherIdPsButton(buffer, params);
-		buffer.append("<br />');");
-
-		resp.setContentType("text/javascript");
-		final PrintWriter out = resp.getWriter();
-		out.write(buffer.toString());
-		out.close();
-	}
-
+	/**
+	 * Builds the {@code friendly} discovery. This is the (default 6)
+	 * "most likely" IdPs for this user, and a link to the {@code full}
+	 * discovery.
+	 */
 	private void buildFriendlyDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
@@ -178,13 +197,49 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		out.close();
 	}
 
-	private void buildNotices(final StringBuilder buffer,
-			final LoginParams params) {
-		buffer.append(wayf);
-		if (params.canBookmark())
-			buffer.append(bookmarkNotice);
+	/**
+	 * Builds the {@code embed} discovery. This is the same style as the
+	 * {@code friendly} discovery, but packed as a JavaScript snippet that
+	 * inserts the relevant HTML.
+	 * 
+	 * The generated JavaScript doesn't interact very much with the host page,
+	 * and doesn't require anything special except that the host page doesn't
+	 * use the namespaces {@code shibboleth-discovery*} (CSS, HTML IDs, Cookies)
+	 * and {@code shibbolethDiscovery*} (JavaScript). It will replace the HTML
+	 * element with ID {@code shibboleth-discovery}, which can be the
+	 * {@code <script>} tag that loads it, or a non-javascript fallback link to
+	 * discovery.
+	 */
+	private void buildEmbeddedDiscovery(final HttpServletRequest req,
+			final HttpServletResponse resp, final LoginParams params)
+			throws IOException {
+		final List<IdPMeta> idps = getIdPList(req, resp);
+
+		final StringBuilder buffer = new StringBuilder();
+		buffer.append(jsHeader);
+		buffer.append("shibbolethDiscovery('").append(webRoot).append("','");
+		buildNotices(buffer, params);
+		for (final IdPMeta idp : idps)
+			buildHTML(buffer, idp, params);
+		buildOtherIdPsButton(buffer, params);
+		buffer.append("<br />');");
+
+		resp.setContentType("text/javascript");
+		final PrintWriter out = resp.getWriter();
+		out.write(buffer.toString());
+		out.close();
 	}
 
+	/**
+	 * Gets the {@link #numTopIdPs} "most likely" IdPs. These are, in order:
+	 * <ol>
+	 * <li>the last one the client used, if any, as marked by a cookie named
+	 * {@link LoginServlet#IDP_COOKIE}
+	 * <li>the most popular ones for "his" network, as defined by
+	 * {@link #getClientNetworkHash(HttpServletRequest)}
+	 * <li>the globally most popular ones
+	 * </ol>
+	 */
 	private List<IdPMeta> getIdPList(final HttpServletRequest req,
 			final HttpServletResponse resp) {
 		final LinkedHashSet<IdPMeta> list = new LinkedHashSet<IdPMeta>(
@@ -206,6 +261,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		return res;
 	}
 
+	/**
+	 * Reads the {@link LoginServlet#IDP_COOKIE} cookie and if possible, inserts
+	 * that IdP into the given list.
+	 */
 	private void addCookieFavorite(final Collection<IdPMeta> list,
 			final HttpServletRequest req) {
 		final Cookie[] cookies = req.getCookies();
@@ -231,6 +290,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		}
 	}
 
+	/**
+	 * Obtains the {@link #numTopIdPs} most popular IdPs for the client's
+	 * nethash, and inserts them into the given list.
+	 */
 	private void addNethashFavorites(final Collection<IdPMeta> list,
 			final HttpServletRequest req) {
 		final List<String> entities = ranking
@@ -239,12 +302,28 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 			meta.addMetadata(list, entities);
 	}
 
+	/**
+	 * Obtains the {@link #numTopIdPs} most popular IdPs across all nethashes,
+	 * and inserts them into the given list.
+	 */
 	private void addGlobalFavorites(final LinkedHashSet<IdPMeta> list) {
 		final List<String> entities = ranking.getGlobalIdPList();
 		if (entities != null)
 			meta.addMetadata(list, entities);
 	}
 
+	/**
+	 * Adds the "Where are you from" prompt, and the
+	 * "you can bookmark these links" notice if appropriate.
+	 */
+	private void buildNotices(final StringBuilder buffer,
+			final LoginParams params) {
+		buffer.append(wayf);
+		if (params.canBookmark())
+			buffer.append(bookmarkNotice);
+	}
+
+	/** Adds the HTML for a single IdP button. */
 	private void buildHTML(final StringBuilder buffer, final IdPMeta idp,
 			final LoginParams params) {
 		// link
@@ -260,6 +339,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				.append("</p></a>");
 	}
 
+	/** Adds the HTML for the "other IdPs" button. */
 	private void buildOtherIdPsButton(final StringBuilder buffer,
 			final LoginParams params) {
 		// link
@@ -273,11 +353,5 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				.append("/shibboleth.png\" />");
 		// display name
 		buffer.append("<p>").append(otherIdPsText).append("</p></a>");
-	}
-
-	@Override
-	public void destroy() {
-		meta.interrupt();
-		db.close();
 	}
 }
