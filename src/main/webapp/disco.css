@@ -15,12 +15,13 @@
 	margin: 0em 1em 1em 0em;
 	padding: .5em 1em 1em 1em;
 	border: 1px solid #eee;
-	border-radius: .4em;
 	background-color: #fff;
 	color: black;
 	font-family: sans-serif;
 	text-decoration: none;
 	overflow: hidden;
+	box-sizing: content-box;
+	border-radius: .4em;
 }
 
 #shibboleth-discovery a:hover {
@@ -31,6 +32,7 @@
 #shibboleth-discovery a img {
 	display: block;
 	height: 5.5em;
+	width: 11em;
 	margin-bottom: .25em;
 }
 
@@ -45,7 +47,12 @@
 }
 
 #shibboleth-discovery a.shibboleth-discovery-others {
-	width: 16em;
+	width: 14.4em;
+}
+
+#shibboleth-discovery a.shibboleth-discovery-others img {
+	width: 14.4em;
+	height: 5.4em;
 }
 
 #shibboleth-discovery #shibboleth-discovery-search {

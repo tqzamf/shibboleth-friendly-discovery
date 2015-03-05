@@ -209,6 +209,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	 * element with ID {@code shibboleth-discovery}, which can be the
 	 * {@code <script>} tag that loads it, or a non-javascript fallback link to
 	 * discovery.
+	 * 
+	 * The only interaction is that if jQuery is present on the host webpage, it
+	 * will be used for a few nontrivial operations. However, there are
+	 * fallbacks using plain javascript, so that jQuery isn't required.
 	 */
 	private void buildEmbeddedDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)

@@ -1,4 +1,4 @@
-$(document).ready(function(){
+$(function() {
 	var box = $(document.createElement("input"));
 	box.attr("id", "shibboleth-discovery-search");
 	// if the text box is empty, put in some notice about its purpose.
@@ -26,16 +26,18 @@ $(document).ready(function(){
 		// note that if there are no keywords, this will unhide all
 		// items.
 		items.css("display", "block");
-		for (var i = 0; i < keywords.length; i++) {
-			var kw = keywords[i];
-			// hide all items whose displayName doesn't contain the
-			// keyword. any item which is ever hidden stays hidden, so
-			// this implements an AND search.
-			items.each(function() {
-				if ($("p", this).text().toLowerCase().indexOf(kw) < 0)
+		items.each(function() {
+			var text = $("p", this).text().toLowerCase();
+			for (var i = 0; i < keywords.length; i++) {
+				// hide all items whose displayName doesn't contain the
+				// keyword. any item which is ever hidden stays hidden,
+				// so this implements an AND search.
+				if (text.indexOf(keywords[i]) < 0) {
 					$(this).css("display", "none");
-			});
-		}
+					break;
+				}
+			}
+		});
 	});
 	// pre-focus the box, so that the user just has to start typing.
 	// this is to maximize usability for regular users. it means that
