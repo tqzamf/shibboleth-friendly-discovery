@@ -3,6 +3,7 @@ package de.uniKonstanz.shib.disco;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -123,8 +124,17 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 * @return network hash
 	 */
 	protected static int getClientNetworkHash(final HttpServletRequest req) {
-		final byte[] addr = InetAddresses.forString(req.getRemoteAddr())
-				.getAddress();
+		// if the connection is from localhost, manually parse the
+		// X-Forwarded-For header, if present. the servlet container doesn't do
+		// that automatically, and without that we always see 127.0.0.1.
+		InetAddress client = InetAddresses.forString(req.getRemoteAddr());
+		final String header = req.getHeader("X-Forwarded-For");
+		if (header != null && !header.isEmpty() && client.isLoopbackAddress()) {
+			final String[] entries = header.split(",");
+			if (entries.length >= 1 && !entries[0].trim().isEmpty())
+				client = InetAddresses.forString(entries[0].trim());
+		}
+		final byte[] addr = client.getAddress();
 		// IPv4: uses the /16 prefix. should roughly match the network size of a
 		// medium-sized organization.
 		if (addr.length == 4)
