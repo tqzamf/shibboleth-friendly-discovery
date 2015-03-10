@@ -34,7 +34,7 @@ public class DatabaseCleanupThread extends Thread {
 	 */
 	public DatabaseCleanupThread(final ReconnectingDatabase db)
 			throws ServletException {
-		super("login database worker");
+		super("database cleanup thread");
 		this.db = db;
 		try {
 			stmt = new ReconnectingStatement(db, "delete from loginstats"

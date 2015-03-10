@@ -44,6 +44,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	private String webRoot;
 	private String defaultLogin;
 	private DatabaseCleanupThread cleanupThread;
+	private CounterFlushThread flushThread;
 
 	@Override
 	public void init() throws ServletException {
@@ -73,8 +74,10 @@ public class LoginServlet extends AbstractShibbolethServlet {
 						return new Counter();
 					}
 				});
+		flushThread = new CounterFlushThread(counter);
 		updateThread.start();
 		cleanupThread.start();
+		flushThread.start();
 	}
 
 	@Override
@@ -83,6 +86,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		counter.invalidateAll();
 		updateThread.shutdown();
 		cleanupThread.shutdown();
+		flushThread.shutdown();
 	}
 
 	@Override
