@@ -179,15 +179,21 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 
 	/**
 	 * Gets the 24-hour interval containing the current time instant. This
-	 * doesn't have anything to do with the calendar day.
+	 * doesn't necessarily have anything to do with the calendar day; it is
+	 * simply the number of seconds since 1970-01-01 00:00:00, divided by 86400
+	 * (24 hours). This may or may not include leap seconds.
 	 * 
 	 * Used to work around inconsistent date handling among databases: there is
 	 * no standard way of doing arithmetic with dates that works across
-	 * databases, so we just use an integer and some local arithmetic instead.
+	 * databases, so we just use an integer field do and some local arithmetic
+	 * instead.
 	 * 
 	 * @return the current day number as an integer
 	 */
 	public static int getCurrentDay() {
+		// not documented whether leap seconds are included. doesn't matter;
+		// we only really need accuracy to be much smaller than the 31 day
+		// interval used by database cleanup.
 		return (int) (System.currentTimeMillis() / 86400000);
 	}
 
