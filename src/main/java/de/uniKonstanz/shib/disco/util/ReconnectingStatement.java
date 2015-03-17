@@ -102,7 +102,7 @@ public class ReconnectingStatement {
 		try {
 			stmt.executeUpdate();
 		} catch (final SQLException e) {
-			LOGGER.log(Level.SEVERE, "failed to execute statement", e);
+			LOGGER.log(Level.WARNING, "failed to execute statement");
 			try {
 				stmt.close();
 			} catch (final SQLException e1) {
@@ -124,7 +124,7 @@ public class ReconnectingStatement {
 		try {
 			return stmt.executeQuery();
 		} catch (final SQLException e) {
-			LOGGER.log(Level.SEVERE, "failed to execute statement", e);
+			LOGGER.log(Level.WARNING, "failed to execute statement");
 			try {
 				stmt.close();
 			} catch (final SQLException e1) {
