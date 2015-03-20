@@ -27,6 +27,11 @@ import de.uniKonstanz.shib.disco.util.HTTP;
  * in {@link LogoUpdaterThread}.
  */
 public class MetadataUpdateThread extends Thread {
+	/**
+	 * Metadata update interval, in seconds, used when there was no error
+	 * fetching metadata.
+	 */
+	public static final int INTERVAL = 15 * 60;
 	private static final Logger LOGGER = Logger
 			.getLogger(MetadataUpdateThread.class.getCanonicalName());
 	private final String feedURL;
@@ -64,7 +69,7 @@ public class MetadataUpdateThread extends Thread {
 					// it doesn't make sense to update it much more frequently.
 					// rationale for 15 minutes is to not delay metadata updates
 					// by another hour (worst case).
-					Thread.sleep(15 * 60 * 1000);
+					Thread.sleep(INTERVAL * 1000);
 				else
 					// retry very quickly on failure. this assumes that errors
 					// are caused by shibboleth restarts, but if shibboleth

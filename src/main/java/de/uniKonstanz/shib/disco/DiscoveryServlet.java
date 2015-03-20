@@ -1,7 +1,6 @@
 package de.uniKonstanz.shib.disco;
 
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -159,11 +158,9 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		for (final IdPMeta idp : idps)
 			buildHTML(buffer, idp, params);
 		buffer.append(footer);
-
-		resp.setContentType("text/html");
-		final PrintWriter out = resp.getWriter();
-		out.write(buffer.toString());
-		out.close();
+		// page won't change until the next metadata update
+		setCacheHeaders(resp, MetadataUpdateThread.INTERVAL);
+		sendResponse(resp, buffer, "text/html");
 	}
 
 	/**
@@ -174,7 +171,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildFriendlyDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = getIdPList(req, resp);
+		final List<IdPMeta> idps = getIdPList(req);
 		if (idps.isEmpty()) {
 			// in the (unlikely) case that none of the entityIDs are known,
 			// fall back to providing the complete list. this is more useful
@@ -191,10 +188,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		buildOtherIdPsButton(buffer, params);
 		buffer.append(footer);
 
-		resp.setContentType("text/html");
-		final PrintWriter out = resp.getWriter();
-		out.write(buffer.toString());
-		out.close();
+		// page is per-user and will change if the "cookie favorite" changes, so
+		// it shouldn't be cached.
+		setCacheHeaders(resp, 0);
+		sendResponse(resp, buffer, "text/html");
 	}
 
 	/**
@@ -217,7 +214,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildEmbeddedDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = getIdPList(req, resp);
+		final List<IdPMeta> idps = getIdPList(req);
 
 		final StringBuilder buffer = new StringBuilder();
 		buffer.append(jsHeader);
@@ -228,10 +225,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		buildOtherIdPsButton(buffer, params);
 		buffer.append("<br />');");
 
-		resp.setContentType("text/javascript");
-		final PrintWriter out = resp.getWriter();
-		out.write(buffer.toString());
-		out.close();
+		// page is per-user and will change if the "cookie favorite" changes, so
+		// it shouldn't be cached.
+		setCacheHeaders(resp, 0);
+		sendResponse(resp, buffer, "text/javascript");
 	}
 
 	/**
@@ -244,8 +241,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	 * <li>the globally most popular ones
 	 * </ol>
 	 */
-	private List<IdPMeta> getIdPList(final HttpServletRequest req,
-			final HttpServletResponse resp) {
+	private List<IdPMeta> getIdPList(final HttpServletRequest req) {
 		final LinkedHashSet<IdPMeta> list = new LinkedHashSet<IdPMeta>(
 				numTopIdPs);
 		addCookieFavorite(list, req);
@@ -256,7 +252,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 			addGlobalFavorites(list);
 
 		// limit to correct number of IdPs, and convert to an actual List
-		final ArrayList<IdPMeta> res = new ArrayList<IdPMeta>(numTopIdPs);
+		final List<IdPMeta> res = new ArrayList<IdPMeta>(numTopIdPs);
 		for (final IdPMeta idp : list) {
 			res.add(idp);
 			if (res.size() >= numTopIdPs)
@@ -266,8 +262,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	}
 
 	/**
-	 * Reads the {@link LoginServlet#IDP_COOKIE} cookie and if possible, inserts
-	 * that IdP into the given list.
+	 * Checks for the {@link LoginServlet#IDP_COOKIE} cookie and, if present,
+	 * inserts the indicated IdP into the list.
 	 */
 	private void addCookieFavorite(final Collection<IdPMeta> list,
 			final HttpServletRequest req) {
@@ -285,8 +281,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				final String entityID = URLDecoder
 						.decode(c.getValue(), "UTF-8");
 				final IdPMeta idp = meta.getMetadata(entityID);
-				if (idp != null)
+				if (idp != null) {
 					list.add(idp);
+					return;
+				}
 			} catch (final Throwable t) {
 				LOGGER.info("malformed cookie: " + c.getValue());
 				// bad cookie; ignored

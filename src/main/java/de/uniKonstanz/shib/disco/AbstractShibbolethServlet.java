@@ -3,8 +3,10 @@ package de.uniKonstanz.shib.disco;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.sql.SQLException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -12,6 +14,7 @@ import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.net.InetAddresses;
@@ -23,6 +26,7 @@ import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
  */
 @SuppressWarnings("serial")
 public abstract class AbstractShibbolethServlet extends HttpServlet {
+	private static final int ONE_YEAR = (int) TimeUnit.DAYS.toSeconds(365);
 	private static final Logger LOGGER = Logger
 			.getLogger(AbstractShibbolethServlet.class.getCanonicalName());
 	public static final int NETHASH_UNDEFINED = -1;
@@ -175,6 +179,49 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	protected String getWebRoot() throws ServletException {
 		return getContextParameter("discovery.web.root")
 				.replaceFirst("/+$", "");
+	}
+
+	/**
+	 * Sets the cache-control headers to allow caching.
+	 * 
+	 * @param resp
+	 *            {@link HttpServletResponse} to modify
+	 * @param maxAge
+	 *            maximum caching time, in seconds. 0 disallows caching.
+	 */
+	protected void setCacheHeaders(final HttpServletResponse resp, int maxAge) {
+		if (maxAge == 0) {
+			resp.setHeader("Cache-Control", "no-cache");
+			resp.setHeader("Pragma", "no-cache");
+			resp.setDateHeader("Expires", System.currentTimeMillis());
+			return;
+		}
+
+		if (maxAge > ONE_YEAR)
+			// HTTP 1.1 specifies: no longer than a year
+			maxAge = ONE_YEAR;
+		resp.setHeader("Cache-Control", "public, max-age=" + maxAge);
+		resp.setDateHeader("Expires", System.currentTimeMillis() + maxAge
+				* 1000);
+	}
+
+	/**
+	 * Sends {@link StringBuilder} as response.
+	 * 
+	 * @param resp
+	 *            {@link HttpServletResponse} to send to
+	 * @param buffer
+	 *            {@link StringBuilder} to send
+	 * @param contentType
+	 *            MIME type of data to send (probably {@code text/*})
+	 */
+	protected void sendResponse(final HttpServletResponse resp,
+			final StringBuilder buffer, final String contentType)
+			throws IOException {
+		resp.setContentType(contentType);
+		final PrintWriter out = resp.getWriter();
+		out.write(buffer.toString());
+		out.close();
 	}
 
 	/**

@@ -83,6 +83,9 @@ public class LogosServlet extends AbstractShibbolethServlet {
 			data = getLogo(filename);
 		else
 			data = generic;
+		// logo files are named according to their contents, so they never
+		// change. allow client to cache them forever.
+		setCacheHeaders(resp, Integer.MAX_VALUE);
 		resp.setContentType("image/png");
 		resp.setContentLength(data.length);
 		final ServletOutputStream output = resp.getOutputStream();

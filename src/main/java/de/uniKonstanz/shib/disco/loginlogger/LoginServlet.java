@@ -125,6 +125,8 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		final Cookie cookie = new Cookie(IDP_COOKIE, encodedEntityID);
 		cookie.setMaxAge(COOKIE_LIFETIME);
 		resp.addCookie(cookie);
+		// disallow caching; we want to see every login
+		setCacheHeaders(resp, 0);
 		resp.sendRedirect(params.getLogin() + "?SAMLDS=1&entityID="
 				+ encodedEntityID + "&target=" + params.getEncodedTarget());
 	}
