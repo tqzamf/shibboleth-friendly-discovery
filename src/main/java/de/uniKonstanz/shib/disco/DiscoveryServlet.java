@@ -81,12 +81,17 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 
 		db = getDatabaseConnection();
 		ranking = new IdPRanking(db, numTopIdPs);
+		// start MetadataUpdateThread and make it available to LoginServlet
 		meta = new MetadataUpdateThread(discoFeed, getLogoCacheDir());
 		meta.start();
+		getServletContext().setAttribute(
+				MetadataUpdateThread.class.getCanonicalName(), meta);
 	}
 
 	@Override
 	public void destroy() {
+		getServletContext().removeAttribute(
+				MetadataUpdateThread.class.getCanonicalName());
 		meta.interrupt();
 		db.close();
 	}

@@ -143,6 +143,22 @@ public class MetadataUpdateThread extends Thread {
 	}
 
 	/**
+	 * Checks whether metadata is available for a particular IdP, given its
+	 * entityID.
+	 * 
+	 * @param entityID
+	 *            identifies the IdP
+	 * @return <code>true</code> iff {@link #getMetadata(String)} would return
+	 *         non-<code>null</code>
+	 */
+	public boolean hasMetadata(final String entityID) {
+		final Map<String, IdPMeta> map = metadata;
+		if (map == null)
+			return false;
+		return map.containsKey(entityID);
+	}
+
+	/**
 	 * Obtains metadata for a list of IdP, identified by their entityIDs.
 	 * 
 	 * @param list

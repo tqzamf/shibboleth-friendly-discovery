@@ -17,6 +17,7 @@ import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
+import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
 
 /**
  * Logs login requests, then redirects to the actual shibboleth login URL.
@@ -45,6 +46,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	private String defaultLogin;
 	private DatabaseCleanupThread cleanupThread;
 	private CounterFlushThread flushThread;
+	private MetadataUpdateThread meta;
 
 	@Override
 	public void init() throws ServletException {
@@ -117,17 +119,43 @@ public class LoginServlet extends AbstractShibbolethServlet {
 			return;
 		}
 
-		// count the entityID and redirect user to shibboleth login URL
+		// only count known-valid entityIDs so that an attacker cannot flood the
+		// database with thousands of invalid entityIDs. perform the redirect
+		// anyway, to avoid becoming an unnecessary point of failure.
 		final int ipHash = getClientNetworkHash(req);
-		if (ipHash >= 0)
+		if (ipHash >= 0 && isEntityIDValid(entityID))
 			counter.getUnchecked(new LoginTuple(ipHash, entityID)).increment();
+		// set "cookie favorite"
 		final String encodedEntityID = URLEncoder.encode(entityID, "UTF-8");
 		final Cookie cookie = new Cookie(IDP_COOKIE, encodedEntityID);
 		cookie.setMaxAge(COOKIE_LIFETIME);
 		resp.addCookie(cookie);
-		// disallow caching; we want to see every login
+		// redirect user to shibboleth login URL. disallow caching; we want to
+		// see every login.
 		setCacheHeaders(resp, 0);
 		resp.sendRedirect(params.getLogin() + "?SAMLDS=1&entityID="
 				+ encodedEntityID + "&target=" + params.getEncodedTarget());
+	}
+
+	/**
+	 * Checks if an entityID is valid for logging, ie. present in Shibboleth's
+	 * metadata.
+	 * 
+	 * @param entityID
+	 *            entityID to check
+	 * @return <code>true</code> if it is in the metadata
+	 */
+	private boolean isEntityIDValid(final String entityID) {
+		// get MetadataUpdateThread from DiscoveryServlet. unlocked, but the
+		// value never changes anyway, and two threads writing the same value
+		// should be safe.
+		if (meta == null)
+			meta = (MetadataUpdateThread) getServletContext().getAttribute(
+					MetadataUpdateThread.class.getCanonicalName());
+		if (meta == null) {
+			LOGGER.info("no metadata yet; not logging " + entityID);
+			return false;
+		}
+		return meta.hasMetadata(entityID);
 	}
 }
