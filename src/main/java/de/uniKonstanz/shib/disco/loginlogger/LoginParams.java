@@ -2,7 +2,6 @@ package de.uniKonstanz.shib.disco.loginlogger;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
-import java.nio.charset.Charset;
 import java.util.logging.Logger;
 
 import javax.servlet.http.HttpServletRequest;

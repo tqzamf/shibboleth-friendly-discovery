@@ -119,7 +119,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		if (ipHash >= 0 && isEntityIDValid(entityID))
 			counter.getUnchecked(new LoginTuple(ipHash, entityID)).increment();
 		// set "cookie favorite"
-		final String encodedEntityID = URLEncoder.encode(entityID, "UTF-8");
+		final String encodedEntityID = URLEncoder.encode(entityID, ENCODING);
 		final Cookie cookie = new Cookie(IDP_COOKIE, encodedEntityID);
 		cookie.setMaxAge(COOKIE_LIFETIME);
 		resp.addCookie(cookie);

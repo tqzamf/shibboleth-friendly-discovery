@@ -277,8 +277,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				continue;
 
 			try {
-				final String entityID = URLDecoder
-						.decode(c.getValue(), "UTF-8");
+				final String entityID = URLDecoder.decode(c.getValue(),
+						ENCODING);
 				final IdPMeta idp = meta.getMetadata(entityID);
 				if (idp != null) {
 					list.add(idp);

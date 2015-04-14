@@ -6,6 +6,7 @@ import java.net.URLEncoder;
 import com.google.common.escape.Escaper;
 import com.google.common.html.HtmlEscapers;
 
+import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
 
 /**
@@ -27,9 +28,11 @@ public class IdPMeta implements Comparable<IdPMeta> {
 				.replaceAll("\\s+", " ").trim();
 		this.logo = logo;
 		try {
-			encEntityID = URLEncoder.encode(entityID, "UTF-8");
+			encEntityID = URLEncoder.encode(entityID,
+					AbstractShibbolethServlet.ENCODING);
 		} catch (final UnsupportedEncodingException e) {
-			throw new RuntimeException("no UTF-8 support", e);
+			throw new RuntimeException("no support for "
+					+ AbstractShibbolethServlet.ENCODING, e);
 		}
 		this.displayName = normalizedDisplayName.toLowerCase();
 		escDisplayName = HTML_ESCAPER.escape(normalizedDisplayName);

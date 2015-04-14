@@ -3,7 +3,6 @@ package de.uniKonstanz.shib.disco;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -18,6 +17,7 @@ import java.util.logging.Logger;
 
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
+import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -36,13 +36,13 @@ import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
  */
 @SuppressWarnings("serial")
 public abstract class AbstractShibbolethServlet extends HttpServlet {
-	private static final Charset UTF8 = Charset.forName("UTF-8");
 	private static final int ONE_YEAR = (int) TimeUnit.DAYS.toSeconds(365);
 	private static final Logger LOGGER = Logger
 			.getLogger(AbstractShibbolethServlet.class.getCanonicalName());
 	public static final int NETHASH_UNDEFINED = -1;
 	/** Default encoding. Anything other than UTF-8 doesn't make sense nowadays. */
 	public static final String ENCODING = "UTF-8";
+	public static final Charset ENCODING_CHARSET = Charset.forName(ENCODING);
 	/**
 	 * Number of supported IdPs. It will handle more, but performance will
 	 * suffer. If set to a value that is too large, memory consumption can
@@ -239,10 +239,12 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	protected void sendResponse(final HttpServletResponse resp,
 			final StringBuilder buffer, final String contentType)
 			throws IOException {
-		resp.setContentType(contentType);
-		resp.setContentLength(buffer.length());
-		final PrintWriter out = resp.getWriter();
-		out.write(buffer.toString());
+		resp.setContentType(contentType + ";charset=" + ENCODING);
+		resp.setCharacterEncoding(ENCODING);
+		final byte[] data = buffer.toString().getBytes(ENCODING_CHARSET);
+		resp.setContentLength(data.length);
+		final ServletOutputStream out = resp.getOutputStream();
+		out.write(data);
 		out.close();
 	}
 
@@ -412,7 +414,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 				retLogin = new URL(url.getProtocol(), url.getHost(),
 						url.getPort(), url.getPath()).toExternalForm();
 				for (final NameValuePair param : URLEncodedUtils.parse(
-						url.getQuery(), UTF8)) {
+						url.getQuery(), ENCODING_CHARSET)) {
 					if (param.getName() == null || param.getValue() == null)
 						continue;
 					if (param.getName().equalsIgnoreCase("target"))
