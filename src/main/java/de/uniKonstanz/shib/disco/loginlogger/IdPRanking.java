@@ -17,7 +17,7 @@ import com.google.common.cache.LoadingCache;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
-import de.uniKonstanz.shib.disco.util.ReconnectingStatement;
+import de.uniKonstanz.shib.disco.util.ReconnectingQuery;
 
 /**
  * Handles loading ranked lists of IdPs from the database. Results are cached
@@ -26,10 +26,10 @@ import de.uniKonstanz.shib.disco.util.ReconnectingStatement;
 public class IdPRanking {
 	private static final Logger LOGGER = Logger.getLogger(IdPRanking.class
 			.getCanonicalName());
-	private final ReconnectingStatement stmt;
+	private final ReconnectingQuery<List<String>, Integer> stmt;
 	private final LoadingCache<Integer, List<String>> cache;
 	private final int numIdPs;
-	private ReconnectingStatement globalStmt;
+	private ReconnectingQuery<List<String>, Void> globalStmt;
 
 	/**
 	 * @param db
@@ -43,12 +43,24 @@ public class IdPRanking {
 			throws ServletException {
 		this.numIdPs = numIdPs;
 		try {
-			stmt = new ReconnectingStatement(db, "select entityid"
-					+ " from loginstats where iphash = ?"
-					+ " group by entityid order by sum(count) desc");
-			globalStmt = new ReconnectingStatement(db, "select entityid"
-					+ " from loginstats"
-					+ " group by entityid order by sum(count) desc");
+			stmt = new ReconnectingQuery<List<String>, Integer>(db,
+					"select entityid from loginstats where iphash = ?"
+							+ " group by entityid order by sum(count) desc") {
+				@Override
+				protected List<String> exec(final Integer nethash)
+						throws SQLException {
+					setInt(1, nethash);
+					return toList(executeQuery());
+				}
+			};
+			globalStmt = new ReconnectingQuery<List<String>, Void>(db,
+					"select entityid from loginstats"
+							+ " group by entityid order by sum(count) desc") {
+				@Override
+				protected List<String> exec(final Void p) throws SQLException {
+					return toList(executeQuery());
+				}
+			};
 		} catch (final SQLException e) {
 			LOGGER.log(Level.SEVERE, "cannot prepare database statement", e);
 			throw new ServletException("cannot connect to database");
@@ -62,6 +74,18 @@ public class IdPRanking {
 						return loadIdPList(key);
 					}
 				});
+	}
+
+	/**
+	 * Executes a statement and returns up to {@link #numIdPs} {@link String}
+	 * results as a list.
+	 */
+	private List<String> toList(final ResultSet res) throws SQLException {
+		final ArrayList<String> list = new ArrayList<String>(numIdPs);
+		while (res.next() && list.size() < numIdPs)
+			list.add(res.getString(1));
+		res.close();
+		return list;
 	}
 
 	/**
@@ -105,19 +129,9 @@ public class IdPRanking {
 		try {
 			return tryGetIdPList(nethash);
 		} catch (final SQLException e) {
-			LOGGER.log(Level.WARNING, "failed to get popular IdPs for "
-					+ nethash + "; will retry", e);
-		}
-
-		// first attempt failed; database connection was somehow broken. let's
-		// try again; the statement will reconnect itself if possible.
-		try {
-			return tryGetIdPList(nethash);
-		} catch (final SQLException e) {
-			// second attempt failed as well, ie. reconnecting failed. this
-			// means the database is probably down; there is no point trying to
-			// reconnect any further. perhaps the next database connection will
-			// succeed again.
+			// retry failed, ie. reconnecting failed. this means the database is
+			// probably down; there is no point trying to reconnect any further.
+			// perhaps the next database connection will succeed again.
 			LOGGER.log(Level.SEVERE, "failed to get popular IdPs for "
 					+ nethash + "; database down?", e);
 			throw e;
@@ -126,30 +140,14 @@ public class IdPRanking {
 
 	/** Non-retrying database helper method. */
 	private List<String> tryGetIdPList(final int nethash) throws SQLException {
-		if (nethash == AbstractShibbolethServlet.NETHASH_UNDEFINED)
-			synchronized (globalStmt) {
-				globalStmt.prepareStatement();
-				return toList(globalStmt);
-			}
-		else
-			synchronized (stmt) {
-				stmt.prepareStatement();
-				stmt.setInt(1, nethash);
-				return toList(stmt);
-			}
-	}
-
-	/**
-	 * Executes a statement and returns up to {@link #numIdPs} {@link String}
-	 * results as a list.
-	 */
-	private List<String> toList(final ReconnectingStatement statement)
-			throws SQLException {
-		final ResultSet res = statement.executeQuery();
-		final ArrayList<String> list = new ArrayList<String>(numIdPs);
-		while (res.next() && list.size() < numIdPs)
-			list.add(res.getString(1));
-		res.close();
-		return list;
+		// note: both statements share the same database, so they must not run
+		// concurrently. thus they deliberately both synchronize on the same
+		// statement, even though that is "the wrong one" for globalStmt.
+		synchronized (stmt) {
+			if (nethash == AbstractShibbolethServlet.NETHASH_UNDEFINED)
+				return globalStmt.executeQuery(null);
+			else
+				return stmt.executeQuery(nethash);
+		}
 	}
 }

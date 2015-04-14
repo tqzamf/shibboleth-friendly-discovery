@@ -90,7 +90,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		getServletContext().removeAttribute(
 				MetadataUpdateThread.class.getCanonicalName());
 		meta.interrupt();
-		db.close();
+		db.shutdown();
 	}
 
 	/** Normalize whitespace. Not safe to use on untrusted data. */

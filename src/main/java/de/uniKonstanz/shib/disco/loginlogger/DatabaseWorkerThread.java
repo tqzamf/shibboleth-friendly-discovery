@@ -1,6 +1,8 @@
 package de.uniKonstanz.shib.disco.loginlogger;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -10,8 +12,9 @@ import java.util.logging.Logger;
 import javax.servlet.ServletException;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
+import de.uniKonstanz.shib.disco.util.ReconnectingBatchUpdate;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
-import de.uniKonstanz.shib.disco.util.ReconnectingStatement;
+import de.uniKonstanz.shib.disco.util.ReconnectingUpdate;
 
 /**
  * Background threads for {@link LoginServlet} that asynchronously pushes the
@@ -39,7 +42,7 @@ public class DatabaseWorkerThread extends Thread {
 		}
 	};
 	private final ReconnectingDatabase db;
-	private final ReconnectingStatement stmt;
+	private final ReconnectingUpdate<List<Entry<LoginTuple, Counter>>> stmt;
 
 	/**
 	 * @param db
@@ -52,9 +55,24 @@ public class DatabaseWorkerThread extends Thread {
 		super("login database worker");
 		this.db = db;
 		try {
-			stmt = new ReconnectingStatement(db, "insert into"
-					+ " loginstats(iphash, entityid, count, created)"
-					+ " values(?, ?, ?, ?)");
+			stmt = new ReconnectingBatchUpdate<List<Entry<LoginTuple, Counter>>>(
+					db, "insert into"
+							+ " loginstats(iphash, entityid, count, created)"
+							+ " values(?, ?, ?, ?)") {
+				@Override
+				protected void exec(
+						final List<Entry<LoginTuple, Counter>> counters)
+						throws SQLException {
+					setInt(4, AbstractShibbolethServlet.getCurrentDay());
+					for (final Entry<LoginTuple, Counter> counter : counters) {
+						setInt(1, counter.getKey().getIpHash());
+						setString(2, counter.getKey().getEntityID());
+						setInt(3, counter.getValue().get());
+						addBatch();
+					}
+					executeUpdate();
+				}
+			};
 		} catch (final SQLException e) {
 			LOGGER.log(Level.SEVERE, "cannot prepare database statement", e);
 			throw new ServletException("cannot connect to database");
@@ -99,57 +117,59 @@ public class DatabaseWorkerThread extends Thread {
 	@Override
 	public void run() {
 		while (!interrupted()) {
-			Entry<LoginTuple, Counter> counter;
+			final List<Entry<LoginTuple, Counter>> counters;
 			try {
-				counter = updateQueue.take();
+				counters = takeNext();
 			} catch (final InterruptedException e) {
 				break;
 			}
-			if (counter == END)
-				break;
-			updateCount(counter);
+			updateCount(counters);
 		}
 
-		db.close();
+		db.shutdown();
+	}
+
+	private List<Entry<LoginTuple, Counter>> takeNext()
+			throws InterruptedException {
+		final Entry<LoginTuple, Counter> counter = updateQueue.take();
+		if (counter == END)
+			throw new InterruptedException("end of queue");
+
+		final List<Entry<LoginTuple, Counter>> counters = new ArrayList<Entry<LoginTuple, Counter>>();
+		counters.add(counter);
+
+		// there could be more than 1 element in the queue. if so, push them all
+		// to the database in a single operation. this is more efficient than
+		// pushing them one by one.
+		while (true) {
+			final Entry<LoginTuple, Counter> head = updateQueue.poll();
+			if (head == null)
+				break;
+			if (head == END)
+				// retain the end marker for next iteration; we still have to
+				// push what we have collected so far.
+				updateQueue.add(END);
+			counters.add(head);
+		}
+		return counters;
 	}
 
 	/**
-	 * Pushes a single counter to the database, retrying the database operations
-	 * if necessary.
+	 * Pushes a list of counters to the database, retrying the database
+	 * operations if necessary.
 	 */
-	private void updateCount(final Entry<LoginTuple, Counter> counter) {
-		try {
-			tryUpdateCount(counter);
+	private void updateCount(final List<Entry<LoginTuple, Counter>> counters) {
+		if (counters.isEmpty())
 			return;
-		} catch (final SQLException e) {
-			LOGGER.log(Level.WARNING,
-					"failed to update counts for " + counter.getKey()
-							+ "; will retry", e);
-		}
 
-		// first attempt failed; database connection was somehow broken. let's
-		// try again; the statement will try to reconnect itself if possible.
 		try {
-			tryUpdateCount(counter);
+			stmt.executeUpdate(counters);
 		} catch (final SQLException e) {
-			// second attempt failed as well, ie. reconnecting failed. this
-			// means the database is probably down; there is no point trying to
-			// reconnect any further. perhaps the next database connection will
-			// succeed again.
-			LOGGER.log(Level.SEVERE,
-					"failed to update counts for " + counter.getKey()
-							+ "; database down?", e);
+			// retry failed, ie. reconnecting failed. this means the database is
+			// probably down; there is no point trying to reconnect any further.
+			// perhaps the next database connection will succeed again.
+			LOGGER.log(Level.SEVERE, "failed to update counts for "
+					+ counters.get(0).getKey() + "; database down?", e);
 		}
-	}
-
-	/** No-retrying database helper method. */
-	private void tryUpdateCount(final Entry<LoginTuple, Counter> counter)
-			throws SQLException {
-		stmt.prepareStatement();
-		stmt.setInt(1, counter.getKey().getIpHash());
-		stmt.setString(2, counter.getKey().getEntityID());
-		stmt.setInt(3, counter.getValue().get());
-		stmt.setInt(4, AbstractShibbolethServlet.getCurrentDay());
-		stmt.executeUpdate();
 	}
 }

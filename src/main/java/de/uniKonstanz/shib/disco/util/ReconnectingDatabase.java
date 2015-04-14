@@ -18,6 +18,7 @@ public class ReconnectingDatabase {
 			.getLogger(ReconnectingDatabase.class.getCanonicalName());
 	private final String jdbcURL;
 	private Connection conn;
+	private boolean shutdown;
 
 	/**
 	 * @param jdbcURL
@@ -35,8 +36,14 @@ public class ReconnectingDatabase {
 
 	/** Opens the database connection. */
 	private void connect() throws SQLException {
+		if (shutdown)
+			throw new IllegalStateException("database already closed");
+
 		LOGGER.info("connecting to database " + jdbcURL);
 		conn = DriverManager.getConnection(jdbcURL);
+		// for performance, don't isolate transactions at all. in the worst
+		// case, the discovery servlet will read counts which are slightly off,
+		// which is perfectly acceptable.
 		conn.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
 	}
 
@@ -45,7 +52,7 @@ public class ReconnectingDatabase {
 	 * fails; makes sure the next call to {@link #getConnection()} will
 	 * reconnect.
 	 */
-	public void close() {
+	void close() {
 		if (conn != null) {
 			LOGGER.info("closing connection to database");
 			try {
@@ -69,9 +76,21 @@ public class ReconnectingDatabase {
 	 * @throws SQLException
 	 *             if reconnection was necessary but unsuccessful
 	 */
-	public Connection getConnection() throws SQLException {
+	Connection getConnection() throws SQLException {
 		if (conn == null)
 			connect();
 		return conn;
+	}
+
+	/**
+	 * Terminates the database connection. Further database calls will throw
+	 * {@link IllegalStateException}s.
+	 * 
+	 * To be called for cleanup, before discontinuing use of the
+	 * {@link ReconnectingDatabase} object.
+	 */
+	public void shutdown() {
+		shutdown = true;
+		close();
 	}
 }

@@ -8,7 +8,7 @@ import javax.servlet.ServletException;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
-import de.uniKonstanz.shib.disco.util.ReconnectingStatement;
+import de.uniKonstanz.shib.disco.util.ReconnectingUpdate;
 
 /**
  * Background threads for {@link LoginServlet} that asynchronously removes
@@ -24,7 +24,7 @@ public class DatabaseCleanupThread extends Thread {
 	 */
 	private static final long INTERVAL = 24 * 60 * 60 * 1000;
 	private final ReconnectingDatabase db;
-	private final ReconnectingStatement stmt;
+	private final ReconnectingUpdate<Integer> stmt;
 
 	/**
 	 * @param db
@@ -37,8 +37,14 @@ public class DatabaseCleanupThread extends Thread {
 		super("database cleanup thread");
 		this.db = db;
 		try {
-			stmt = new ReconnectingStatement(db, "delete from loginstats"
-					+ " where created < ?");
+			stmt = new ReconnectingUpdate<Integer>(db, "delete from loginstats"
+					+ " where created < ?", false) {
+				@Override
+				protected void exec(final Integer day) throws SQLException {
+					setInt(1, day);
+					executeUpdate();
+				}
+			};
 		} catch (final SQLException e) {
 			LOGGER.log(Level.SEVERE, "cannot prepare database statement", e);
 			throw new ServletException("cannot connect to database");
@@ -74,7 +80,7 @@ public class DatabaseCleanupThread extends Thread {
 			}
 		}
 
-		db.close();
+		db.shutdown();
 	}
 
 	/**
@@ -83,32 +89,15 @@ public class DatabaseCleanupThread extends Thread {
 	 */
 	private void cleanup(final int day) {
 		try {
-			tryCleanup(day);
-			return;
+			stmt.executeUpdate(day);
 		} catch (final SQLException e) {
-			LOGGER.log(Level.WARNING, "failed to cleanup counts; will retry", e);
-		}
-
-		// first attempt failed; database connection was somehow broken. let's
-		// try again; the statement will try to reconnect itself if possible.
-		try {
-			tryCleanup(day);
-		} catch (final SQLException e) {
-			// second attempt failed as well, ie. reconnecting failed. this
-			// means the database is probably down; there is no point trying to
-			// reconnect any further. perhaps the next database connection will
-			// succeed again.
+			// retry faile, ie. reconnecting failed. this means the database is
+			// probably down; there is no point trying to reconnect any further.
+			// perhaps the next database connection will succeed again.
 			// nothing severe has happened: in the worst case, stale entries
 			// will continue to linger for a few more days.
 			LOGGER.log(Level.WARNING,
 					"failed to cleanup counts; database down?", e);
 		}
-	}
-
-	/** No-retrying database helper method. */
-	private void tryCleanup(final int day) throws SQLException {
-		stmt.prepareStatement();
-		stmt.setInt(1, day);
-		stmt.executeUpdate();
 	}
 }
