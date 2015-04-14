@@ -105,8 +105,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		resp.setCharacterEncoding(ENCODING);
 		// get target and login attributes, or use defaults. if none given and
 		// no default, that's a fatal error; we cannot recover from that.
-		final LoginParams params = LoginParams.parse(req, defaultTarget,
-				defaultLogin);
+		final LoginParams params = parseLoginParams(req);
 		if (params == null) {
 			LOGGER.warning("request without valid attributes from "
 					+ req.getRemoteAddr() + "; sending error");

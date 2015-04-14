@@ -5,7 +5,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.charset.Charset;
 import java.sql.SQLException;
+import java.util.Arrays;
+import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -15,6 +21,9 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
 
 import com.google.common.io.ByteStreams;
 import com.google.common.net.InetAddresses;
@@ -27,6 +36,7 @@ import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
  */
 @SuppressWarnings("serial")
 public abstract class AbstractShibbolethServlet extends HttpServlet {
+	private static final Charset UTF8 = Charset.forName("UTF-8");
 	private static final int ONE_YEAR = (int) TimeUnit.DAYS.toSeconds(365);
 	private static final Logger LOGGER = Logger
 			.getLogger(AbstractShibbolethServlet.class.getCanonicalName());
@@ -56,6 +66,12 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	protected String defaultTarget;
 	/** default URL to /Shibboleth.sso/Login, used if none given. */
 	protected String defaultLogin;
+	/**
+	 * list of StorageService prefixes used in {@code target=} parameters. these
+	 * are safe for use in in {@code target=} parameters (obviously), but
+	 * non-bookmarkable.
+	 */
+	protected List<String> ssPrefixes;
 
 	@Override
 	public void init() throws ServletException {
@@ -64,6 +80,8 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 				"");
 		defaultTarget = getContextDefaultParameter("target");
 		defaultLogin = getContextDefaultParameter("login");
+		ssPrefixes = Arrays.asList(getContextParameter(
+				"shibboleth.storageservice.prefixes").split(" +"));
 	}
 
 	/**
@@ -313,5 +331,129 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 			LOGGER.log(Level.SEVERE, "cannot read resource " + resource, e);
 			throw new ServletException("cannot read resource " + resource);
 		}
+	}
+
+	/**
+	 * Checks whether a URL refers to a StorageService configured for the
+	 * Shibboleth SP.
+	 * 
+	 * @param url
+	 *            the URL to check
+	 * @return <code>true</code> if this URL refers to a StorageService
+	 */
+	protected boolean isStorageService(final String target) {
+		for (final String p : ssPrefixes)
+			if (target.startsWith(p))
+				return true;
+		return false;
+	}
+
+	/**
+	 * Validates that a URL is safe in the sense that redirecting a browser to
+	 * that URL won't trigger any unexpected behavior. This works around
+	 * misfeatures like the "javascript:" URL non-scheme, which definitely isn't
+	 * a good protocol to redirect to, but also prevents redirects to "custom"
+	 * protocol handlers that will start an external program.
+	 * 
+	 * Note that no check for malicious content is performed, because all modern
+	 * browsers have built-in phishing and attack-site detection.
+	 * 
+	 * @param url
+	 *            the URL to check
+	 * @return <code>true</code> if it is safe to redirect a browser to it
+	 */
+	protected boolean isSafeURL(final String url) {
+		// HTTP and HTTPS URLs are known to be safe in that they do not trigger
+		// unexpected browser behavior. phishing and malware sites should be
+		// protected against by the browser's phishing-and-malware protection.
+		if (url.startsWith("http://") || url.startsWith("https://"))
+			return true;
+
+		// absolute URLs without the scheme component simply use whatever
+		// protocol they used to reach the discovery. because it only supports
+		// HTTP(S), the protocol is safe as well.
+		// note: according to RFC3986, the URL scheme cannot contain slashes, so
+		// if the URL does start with a slash, it must be absolute.
+		if (url.startsWith("/"))
+			return true;
+
+		// any other protocol is probably unsafe to use. note that there is no
+		// Shibboleth plugin for non-HTTP(S) protocols anyway.
+		return false;
+	}
+
+	/**
+	 * Obtains the shibboleth login URL and login target URL for an
+	 * {@link HttpServletRequest}. Uses, in order of prefererence:
+	 * <ol>
+	 * <li>the explicit {@code login} and {@code target} URL parameters, if
+	 * present
+	 * <li>login and target parsed from shibboleth's {@code return} parameter,
+	 * if present
+	 * <li>the configured default login and target URLs
+	 * </ol>
+	 * 
+	 * @param req
+	 *            the client request
+	 * @return the {@link LoginParams} describing the combination, or
+	 *         <code>null</code> if no defaults are configured
+	 */
+	protected LoginParams parseLoginParams(final HttpServletRequest req) {
+		// Shibboleth adds its "return=" parameter to every discovery request.
+		// that's generally a good thing, but prevents the links from being
+		// bookmarkable. we support it as a backup, but prefer the explicit
+		// login+target from the URL if present.
+		final String ret = req.getParameter("return");
+		String retLogin = null;
+		String retTarget = null;
+		if (ret != null) {
+			try {
+				final URL url = new URL(ret);
+				retLogin = new URL(url.getProtocol(), url.getHost(),
+						url.getPort(), url.getPath()).toExternalForm();
+				for (final NameValuePair param : URLEncodedUtils.parse(
+						url.getQuery(), UTF8)) {
+					if (param.getName() == null || param.getValue() == null)
+						continue;
+					if (param.getName().equalsIgnoreCase("target"))
+						retTarget = param.getValue();
+				}
+			} catch (final MalformedURLException e) {
+				LOGGER.log(Level.INFO, "invalid return URL: " + ret, e);
+			}
+		}
+
+		final String target = getParameter(req, "target", retTarget,
+				defaultTarget);
+		final String login = getParameter(req, "login", retLogin, defaultLogin);
+		if (target == null || login == null)
+			return null;
+		return new LoginParams(login, target, !isStorageService(target));
+	}
+
+	/**
+	 * Helper method to get an explicit URL parameter, or one form the
+	 * {@code return} parameters, or the default, or <code>null</code>.
+	 */
+	private static String getParameter(final HttpServletRequest req,
+			final String name, final String fallback, final String deflt)
+			throws NoSuchElementException {
+		// if an explicit parameter is configured in the URL then use it,
+		// overriding the one given by Shibboleth's "return=" parameter if
+		// present.
+		// this order is chosen because it is easy to not pass a parameter in
+		// the discovery URL, but Shibboleth cannot be told to omit the
+		// "return=" parameter.
+		final String param = req.getParameter(name);
+		if (param != null && !param.isEmpty())
+			return param;
+		// use the value from "return=" parameter next, or the default if one is
+		// given.
+		if (fallback != null && !fallback.isEmpty())
+			return fallback;
+		if (deflt != null & !deflt.isEmpty())
+			return deflt;
+		// if there is no default, we have a missing parameter
+		return null;
 	}
 }

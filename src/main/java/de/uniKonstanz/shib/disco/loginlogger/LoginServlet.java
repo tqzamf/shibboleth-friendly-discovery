@@ -93,10 +93,9 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		resp.setCharacterEncoding(ENCODING);
 		// get target attribute, or use default. if none given and no default,
 		// that's a fatal error; we cannot recover from that.
-		final LoginParams params = LoginParams.parse(req, defaultTarget,
-				defaultLogin);
+		final LoginParams params = parseLoginParams(req);
 		if (params == null) {
-			LOGGER.warning("request without valid attributes from "
+			LOGGER.info("request without valid attributes from "
 					+ req.getRemoteAddr() + "; sending error");
 			resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
 					"missing target/login or return attributes");
@@ -128,13 +127,29 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		// see every login.
 		setCacheHeaders(resp, 0);
 
-		/*
-		 * TODO as is, this allows redirects to arbitrary sites, which can be
-		 * used for some obscure attacks which rely on the user recognizing a
-		 * URL as safe, not noticing that it redirects to another site, and
-		 * entering credentials. plain shibboleth has these arbirary redirects
-		 * only AFTER login, so something should be done about this.
-		 */
+		// this allows redirects to arbitrary sites, which can be used for some
+		// obscure attacks which rely on the user recognizing a URL as safe, not
+		// noticing that it redirects to another site, and entering credentials.
+		// for a modern browsers, this may also involve clicking through a
+		// (generally reddish) phishing warning.
+		// the only countermeasure for now is to limit redirects to known-safe
+		// URLs, so we don't redirect to "javascript:your-xss-here", or end up
+		// opening external programs.
+		if (!isSafeURL(params.getLogin())) {
+			LOGGER.info("refusing redirect to unsafe url " + params.getLogin()
+					+ "; sending error");
+			resp.sendError(HttpServletResponse.SC_FORBIDDEN,
+					"refusing to redirect to " + params.getLogin());
+			return;
+		}
+		if (!isSafeURL(params.getTarget())
+				&& !isStorageService(params.getTarget())) {
+			LOGGER.info("refusing login to unsafe url " + params.getTarget()
+					+ "; sending error");
+			resp.sendError(HttpServletResponse.SC_FORBIDDEN,
+					"refusing to redirect to " + params.getTarget());
+			return;
+		}
 		resp.sendRedirect(params.getLogin() + "?SAMLDS=1&entityID="
 				+ encodedEntityID + "&target=" + params.getEncodedTarget());
 	}
