@@ -47,11 +47,9 @@ import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private static final Logger LOGGER = Logger
 			.getLogger(DiscoveryServlet.class.getCanonicalName());
-	private String webRoot;
 	private ReconnectingDatabase db;
 	private MetadataUpdateThread meta;
 	private String discoFeed;
-	private String defaultTarget;
 	private String friendlyHeader;
 	private String fullHeader;
 	private String footer;
@@ -59,19 +57,17 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private int numTopIdPs;
 	private String jsHeader;
 	private String otherIdPsText;
-	private String defaultLogin;
 	private String bookmarkNotice;
 	private String wayf;
 
 	@Override
 	public void init() throws ServletException {
-		webRoot = getWebRoot();
+		super.init();
 		discoFeed = getContextParameter("shibboleth.discofeed.url");
 		numTopIdPs = Integer
 				.parseInt(getContextParameter("discovery.friendly.idps"));
 		otherIdPsText = getContextParameter("discovery.friendly.others");
-		defaultTarget = getContextDefaultParameter("target");
-		defaultLogin = getContextDefaultParameter("login");
+
 		jsHeader = getResourceAsString("header.js");
 		friendlyHeader = getResourceAsString("friendly-header.html");
 		fullHeader = getResourceAsString("full-header.html");
@@ -90,6 +86,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 
 	@Override
 	public void destroy() {
+		super.destroy();
 		getServletContext().removeAttribute(
 				MetadataUpdateThread.class.getCanonicalName());
 		meta.interrupt();
@@ -111,7 +108,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		final LoginParams params = LoginParams.parse(req, defaultTarget,
 				defaultLogin);
 		if (params == null) {
-			LOGGER.warning("request without required attributes from "
+			LOGGER.warning("request without valid attributes from "
 					+ req.getRemoteAddr() + "; sending error");
 			resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
 					"missing target/login or return attributes");
@@ -120,9 +117,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		// redirect to full discovery if no discovery flavor specified
 		final String pi = req.getPathInfo();
 		if (pi == null || pi.equals("/")) {
-			resp.sendRedirect(webRoot + "/discovery/full?target="
-					+ params.getEncodedTarget() + "&login="
-					+ params.getEncodedLogin());
+			sendRedirectToFullDiscovery(resp, params);
 			return;
 		}
 
@@ -333,15 +328,15 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	/** Adds the HTML for a single IdP button. */
 	private void buildHTML(final StringBuilder buffer, final IdPMeta idp,
 			final LoginParams params) {
-		// link
-		buffer.append("<a href=\"").append(webRoot).append("/login?target=")
-				.append(params.getEncodedTarget()).append("&amp;login=")
-				.append(params.getEncodedLogin()).append("&amp;entityID=")
-				.append(idp.getEncodedEntityID()).append("\">");
-		// logo
+		// link; parameters carefully encoded
+		buffer.append("<a href=\"").append(webRoot).append("/login?");
+		params.appendToURL(buffer);
+		buffer.append("&amp;entityID=").append(idp.getEncodedEntityID())
+				.append("\">");
+		// logo; filename never contains anything unsafe
 		buffer.append("<img src=\"").append(webRoot).append("/logo/")
 				.append(idp.getLogoFilename()).append("\" />");
-		// display name
+		// display name (escaped)
 		buffer.append("<p>").append(idp.getEscapedDisplayName())
 				.append("</p></a>");
 	}
@@ -349,16 +344,16 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	/** Adds the HTML for the "other IdPs" button. */
 	private void buildOtherIdPsButton(final StringBuilder buffer,
 			final LoginParams params) {
-		// link
+		// link; parameters carefully encoded
 		buffer.append("<br /><a href=\"").append(webRoot)
-				.append("/discovery/full?target=")
-				.append(params.getEncodedTarget()).append("&amp;login=")
-				.append(params.getEncodedLogin())
-				.append("\" class=\"shibboleth-discovery-others\">");
-		// logo
+				.append("/discovery/full?");
+		params.appendToURL(buffer);
+		buffer.append("\" class=\"shibboleth-discovery-others\">");
+		// logo; filename never contains anything unsafe
 		buffer.append("<img src=\"").append(webRoot)
 				.append("/shibboleth.png\" />");
-		// display name
+		// other IdPs text. unescaped so it can contain HTML; that string
+		// is trusted anyway.
 		buffer.append("<p>").append(otherIdPsText).append("</p></a>");
 	}
 }

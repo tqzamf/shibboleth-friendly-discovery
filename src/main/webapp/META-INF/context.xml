@@ -11,12 +11,12 @@
 	<Parameter name="shibboleth.default.target" value=""
 		description="default URL to visit after login if none given; empty to return an error message in that case" />
 	<Parameter name="shibboleth.default.login" value=""
-		description="default URL to /Shibboleth.sso/Login used if none given; empty to return an error" />
+		description="default URL to /Shibboleth.sso/Login, used if none given; empty to return an error" />
 
 	<Parameter name="discovery.web.root" value="/shibboleth/"
 		description="root URL of servlet, usually absolute but without scheme component" />
 	<Parameter name="discovery.friendly.idps" value="6"
 		description="number of IdPs to show in the 'friendly' discovery" />
 	<Parameter name="discovery.friendly.others" value="other institution"
-		description="text to show on the 'other IdPs' button" />
+		description="text to show on the 'other IdPs' button; can contain HTML" />
 </Context>

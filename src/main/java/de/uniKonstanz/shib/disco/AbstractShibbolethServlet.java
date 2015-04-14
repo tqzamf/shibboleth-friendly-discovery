@@ -19,6 +19,7 @@ import javax.servlet.http.HttpServletResponse;
 import com.google.common.io.ByteStreams;
 import com.google.common.net.InetAddresses;
 
+import de.uniKonstanz.shib.disco.loginlogger.LoginParams;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 
 /**
@@ -49,6 +50,22 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 */
 	public static final String LANGUAGE = "en";
 
+	/** root URL of servlet, as visible externally. */
+	protected String webRoot;
+	/** default URL to visit after login if none given. */
+	protected String defaultTarget;
+	/** default URL to /Shibboleth.sso/Login, used if none given. */
+	protected String defaultLogin;
+
+	@Override
+	public void init() throws ServletException {
+		super.init();
+		webRoot = getContextParameter("discovery.web.root").replaceFirst("/+$",
+				"");
+		defaultTarget = getContextDefaultParameter("target");
+		defaultLogin = getContextDefaultParameter("login");
+	}
+
 	/**
 	 * Get a parameter from {@link ServletContext}.
 	 * 
@@ -78,7 +95,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 * @throws ServletException
 	 *             if the named parameter doesn't exist
 	 */
-	protected String getContextDefaultParameter(final String suffix)
+	private String getContextDefaultParameter(final String suffix)
 			throws ServletException {
 		final String dflt = getContextParameter("shibboleth.default." + suffix);
 		if (dflt.isEmpty())
@@ -168,20 +185,6 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	}
 
 	/**
-	 * Get the {@code "discovery.web.root"} context parameter, without trailing
-	 * slashes.
-	 * 
-	 * @return the {@code "discovery.web.root"} context parameter
-	 * @throws ServletException
-	 *             if the {@code "discovery.web.root"} context parameter doesn't
-	 *             exist
-	 */
-	protected String getWebRoot() throws ServletException {
-		return getContextParameter("discovery.web.root")
-				.replaceFirst("/+$", "");
-	}
-
-	/**
 	 * Sets the cache-control headers to allow caching.
 	 * 
 	 * @param resp
@@ -219,9 +222,27 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 			final StringBuilder buffer, final String contentType)
 			throws IOException {
 		resp.setContentType(contentType);
+		resp.setContentLength(buffer.length());
 		final PrintWriter out = resp.getWriter();
 		out.write(buffer.toString());
 		out.close();
+	}
+
+	/**
+	 * Redirects the client to the "full" discovery.
+	 * 
+	 * @param resp
+	 *            {@link HttpServletResponse} to send the redirect to
+	 * @param params
+	 *            {@link LoginParams} derived from the client's request, so that
+	 *            they are passed to discovery
+	 */
+	protected void sendRedirectToFullDiscovery(final HttpServletResponse resp,
+			final LoginParams params) throws IOException {
+		final StringBuilder buffer = new StringBuilder();
+		buffer.append(webRoot).append("/discovery/full?");
+		params.appendToURL(buffer);
+		resp.sendRedirect(buffer.toString());
 	}
 
 	/**

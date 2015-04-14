@@ -43,6 +43,7 @@ public class LogosServlet extends AbstractShibbolethServlet {
 
 	@Override
 	public void init() throws ServletException {
+		super.init();
 		logoCache = getLogoCacheDir();
 		generic = getResource("generic.png");
 

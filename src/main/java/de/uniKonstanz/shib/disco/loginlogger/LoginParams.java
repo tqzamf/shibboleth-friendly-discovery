@@ -84,6 +84,18 @@ public class LoginParams {
 	}
 
 	/**
+	 * Appends the {@code target=} and {@code login=} parameters to a URL. The
+	 * parameters are properly escaped.
+	 * 
+	 * @param buffer
+	 *            the {@link StringBuilder} holding the URL
+	 */
+	public void appendToURL(final StringBuilder buffer) {
+		buffer.append("target=").append(encodedTarget);
+		buffer.append("&amp;login=").append(encodedLogin);
+	}
+
+	/**
 	 * Determines whether the target will remain valid beyond the lifetime of
 	 * the current shibboleth session. If it is an entityID, then it is likely
 	 * to remain valid. Conversely, the {@code ss:mem:*} scheme is known to stop

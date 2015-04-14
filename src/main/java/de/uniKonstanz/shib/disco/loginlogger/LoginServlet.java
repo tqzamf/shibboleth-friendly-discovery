@@ -39,24 +39,19 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	public static final String IDP_COOKIE = "shibboleth-discovery";
 	/** Make the cookie last for a year before it spoils. */
 	private static final int COOKIE_LIFETIME = 60 * 60 * 24 * 365;
-	public String defaultTarget;
 	private LoadingCache<LoginTuple, Counter> counter;
 	private DatabaseWorkerThread updateThread;
-	private String webRoot;
-	private String defaultLogin;
 	private DatabaseCleanupThread cleanupThread;
 	private CounterFlushThread flushThread;
 	private MetadataUpdateThread meta;
 
 	@Override
 	public void init() throws ServletException {
+		super.init();
 		updateThread = new DatabaseWorkerThread(getDatabaseConnection());
 		// note: separate database; they cannot be shared safely
 		cleanupThread = new DatabaseCleanupThread(getDatabaseConnection());
 
-		webRoot = getWebRoot();
-		defaultTarget = getContextDefaultParameter("target");
-		defaultLogin = getContextDefaultParameter("login");
 		if (!defaultLogin.startsWith("https://"))
 			LOGGER.warning("shibboleth login URL isn't absolute or non-SSL: "
 					+ defaultLogin);
@@ -84,6 +79,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 
 	@Override
 	public void destroy() {
+		super.destroy();
 		// push all counts in memory to the database before terminating
 		counter.invalidateAll();
 		updateThread.shutdown();
@@ -100,7 +96,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		final LoginParams params = LoginParams.parse(req, defaultTarget,
 				defaultLogin);
 		if (params == null) {
-			LOGGER.warning("request without required attributes from "
+			LOGGER.warning("request without valid attributes from "
 					+ req.getRemoteAddr() + "; sending error");
 			resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
 					"missing target/login or return attributes");
@@ -113,9 +109,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		if (entityID == null) {
 			LOGGER.info("login request without entityID from "
 					+ req.getRemoteAddr() + "; redirecting to discovery");
-			resp.sendRedirect(webRoot + "/discovery/full?target="
-					+ params.getEncodedTarget() + "&login="
-					+ params.getEncodedLogin());
+			sendRedirectToFullDiscovery(resp, params);
 			return;
 		}
 
@@ -133,6 +127,14 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		// redirect user to shibboleth login URL. disallow caching; we want to
 		// see every login.
 		setCacheHeaders(resp, 0);
+
+		/*
+		 * TODO as is, this allows redirects to arbitrary sites, which can be
+		 * used for some obscure attacks which rely on the user recognizing a
+		 * URL as safe, not noticing that it redirects to another site, and
+		 * entering credentials. plain shibboleth has these arbirary redirects
+		 * only AFTER login, so something should be done about this.
+		 */
 		resp.sendRedirect(params.getLogin() + "?SAMLDS=1&entityID="
 				+ encodedEntityID + "&target=" + params.getEncodedTarget());
 	}

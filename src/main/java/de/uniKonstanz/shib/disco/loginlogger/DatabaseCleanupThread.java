@@ -18,11 +18,11 @@ public class DatabaseCleanupThread extends Thread {
 	private static final Logger LOGGER = Logger
 			.getLogger(DatabaseCleanupThread.class.getCanonicalName());
 	/**
-	 * Clean up every 6 hours. This may cause database timeouts, but the
+	 * Clean up every 24 hours. This may cause database timeouts, but the
 	 * {@link ReconnectingDatabase} will perform correct retries, and proper
 	 * databases don't time out anyway.
 	 */
-	private static final long INTERVAL = 6 * 60 * 60 * 1000;
+	private static final long INTERVAL = 24 * 60 * 60 * 1000;
 	private final ReconnectingDatabase db;
 	private final ReconnectingStatement stmt;
 
