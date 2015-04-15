@@ -2,14 +2,51 @@
 <html>
 <head>
 <meta charset="utf-8" />
-<link rel="stylesheet" href="disco.css" type="text/css" />
+<style type="text/css">
+a.fallback {
+	display: block;
+	float: left;
+	width: 14.4em;
+	height: 8em;
+	margin: 0em 1em 1em 0em;
+	padding: .5em 1em 1em 1em;
+	border: 1px solid #eee;
+	background-color: #fff;
+	color: black;
+	font-family: sans-serif;
+	text-decoration: none;
+	overflow: hidden;
+	white-space: normal;
+	text-align: center;
+	margin: 0 auto;
+	box-sizing: content-box;
+	border-radius: .4em;
+}
+
+a.fallback:hover {
+	border: 1px solid #ccc;
+	background-color: #eee;
+}
+
+.fallback * {
+	display: block;
+}
+
+#shibboleth-discovery a.fallback img {
+	width: 14.4em;
+	height: 5.4em;
+}
+</style>
 <title>Shibboleth login</title>
 </head>
 <body>
 <h1>Shibboleth login</h1>
 <div id="shibboleth-discovery">
-<a href="discovery/full" class="shibboleth-discovery-others"><img src="shibboleth.png" /><p>log in with Shibboleth</p></a>
-<script src="discovery/embed" type="text/javascript"></script>
+	<a href="discovery/full" class="fallback">
+		<img src="shibboleth.png" />
+		<p>log in with Shibboleth</p></a>
+	<script src="discovery/embed" type="text/javascript"
+		defer="defer"></script>
 </div>
 </body>
 </html>

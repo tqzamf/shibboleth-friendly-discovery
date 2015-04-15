@@ -5,4 +5,3 @@ create table loginstats(
 	created integer not null);
 create index loginstats_entityid
 	on loginstats(iphash, entityid);
-grant select, insert, delete on loginstats to shibdisco;

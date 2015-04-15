@@ -3,7 +3,7 @@
 	<Parameter name="database.jdbc.driver" value="org.postgresql.Driver"
 		description="canonical name of JDBC driver class" />
 	<Parameter name="database.jdbc.url"
-		value="jdbc:postgresql://localhost/test?user=test&amp;password=test"
+		value="jdbc:postgresql://localhost/shibdisco?user=shibdisco&amp;password=secret"
 		description="full JDBC connection URL, including username and password" />
 
 	<Parameter name="shibboleth.discofeed.url" value="http://localhost/Shibboleth.sso/DiscoFeed"
