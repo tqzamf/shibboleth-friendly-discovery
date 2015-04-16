@@ -23,6 +23,7 @@ abstract class ReconnectingStatement<T> {
 	private final String query;
 	private PreparedStatement stmt;
 	private final boolean transaction;
+	private Connection conn;
 
 	/**
 	 * @param db
@@ -84,12 +85,13 @@ abstract class ReconnectingStatement<T> {
 	/** Non-retrying {@link PreparedStatement} helper. */
 	private void tryPrepareStatement() throws SQLException {
 		try {
-			final Connection conn = db.getConnection();
+			conn = db.getConnection();
 			if (transaction)
 				conn.setAutoCommit(false);
 			stmt = conn.prepareStatement(query);
 		} catch (final SQLException e) {
 			stmt = null;
+			conn = null;
 			db.close();
 			throw e;
 		}
@@ -143,5 +145,10 @@ abstract class ReconnectingStatement<T> {
 	/** Wraps {@link PreparedStatement#executeBatch()}. */
 	void executeBatch() throws SQLException {
 		stmt.executeBatch();
+	}
+
+	/** Wraps {@link Connection#commit()}. */
+	void commit() throws SQLException {
+		conn.commit();
 	}
 }

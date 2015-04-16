@@ -28,7 +28,7 @@ public abstract class ReconnectingUpdate<Params> extends
 	 * @throws SQLException
 	 *             if the query fails to parse
 	 */
-	public ReconnectingUpdate(final ReconnectingDatabase db,
+	protected ReconnectingUpdate(final ReconnectingDatabase db,
 			final String query, final boolean transaction) throws SQLException {
 		super(db, query, transaction);
 	}

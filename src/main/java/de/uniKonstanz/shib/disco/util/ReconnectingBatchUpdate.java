@@ -36,6 +36,7 @@ public abstract class ReconnectingBatchUpdate<Params> extends
 	@Override
 	protected void executeUpdate() throws SQLException {
 		super.executeBatch();
+		super.commit();
 	}
 
 	/** Wraps {@link PreparedStatement#addBatch()}. */
