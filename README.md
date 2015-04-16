@@ -240,7 +240,7 @@ Configuration
 * `database.jdbc.url`: the JDBC connection URL, including username and
 	password, as well as any other options you would like to set. see the
 	PostgreSQL documentation for the full syntax, or just adapt the example
-	`jdbc:postgresql://localhost/shibdisco?user=shibdisco&;password=secret`.
+	`jdbc:postgresql://localhost/shibdisco?user=shibdisco&password=secret`.
 	note that because the context config file is an XML document, any `&`
 	characters in the URL will have to be escaped to `&amp;`.
 
