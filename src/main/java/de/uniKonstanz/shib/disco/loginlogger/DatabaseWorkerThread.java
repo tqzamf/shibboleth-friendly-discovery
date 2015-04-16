@@ -145,10 +145,12 @@ public class DatabaseWorkerThread extends Thread {
 			final Entry<LoginTuple, Counter> head = updateQueue.poll();
 			if (head == null)
 				break;
-			if (head == END)
+			if (head == END) {
 				// retain the end marker for next iteration; we still have to
 				// push what we have collected so far.
 				updateQueue.add(END);
+				break;
+			}
 			counters.add(head);
 		}
 		return counters;
