@@ -116,8 +116,14 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		// database with thousands of invalid entityIDs. perform the redirect
 		// anyway, to avoid becoming an unnecessary point of failure.
 		final int ipHash = getClientNetworkHash(req);
-		if (ipHash >= 0 && isEntityIDValid(entityID))
-			counter.getUnchecked(new LoginTuple(ipHash, entityID)).increment();
+		if (ipHash >= 0) {
+			if (isEntityIDValid(entityID)) {
+				final LoginTuple key = new LoginTuple(ipHash, entityID);
+				counter.getUnchecked(key).increment();
+			} else
+				LOGGER.info("login request with unknown entityID=" + entityID
+						+ " from " + req.getRemoteAddr());
+		}
 		// set "cookie favorite"
 		final String encodedEntityID = URLEncoder.encode(entityID, ENCODING);
 		final Cookie cookie = new Cookie(IDP_COOKIE, encodedEntityID);
