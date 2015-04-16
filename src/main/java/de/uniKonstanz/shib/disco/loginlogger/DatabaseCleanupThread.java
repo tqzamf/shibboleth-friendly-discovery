@@ -38,7 +38,7 @@ public class DatabaseCleanupThread extends Thread {
 		this.db = db;
 		try {
 			stmt = new ReconnectingUpdate<Integer>(db, "delete from loginstats"
-					+ " where created < ?", false) {
+					+ " where created < ? or count <= 0", false) {
 				@Override
 				protected void exec(final Integer day) throws SQLException {
 					setInt(1, day);

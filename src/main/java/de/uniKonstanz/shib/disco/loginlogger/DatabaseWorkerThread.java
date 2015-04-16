@@ -65,10 +65,17 @@ public class DatabaseWorkerThread extends Thread {
 						throws SQLException {
 					setInt(4, AbstractShibbolethServlet.getCurrentDay());
 					for (final Entry<LoginTuple, Counter> counter : counters) {
-						setInt(1, counter.getKey().getIpHash());
-						setString(2, counter.getKey().getEntityID());
-						setInt(3, counter.getValue().get());
-						addBatch();
+						final int count = counter.getValue().get();
+						if (count > 0) {
+							// zero counters can be created due to expiry
+							// processing. don't upload those to the database;
+							// they contain no information and slow down query
+							// processing.
+							setInt(1, counter.getKey().getIpHash());
+							setString(2, counter.getKey().getEntityID());
+							setInt(3, count);
+							addBatch();
+						}
 					}
 					executeUpdate();
 				}
