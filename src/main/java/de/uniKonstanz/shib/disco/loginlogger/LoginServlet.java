@@ -17,6 +17,7 @@ import com.google.common.cache.RemovalListener;
 import com.google.common.cache.RemovalNotification;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
+import de.uniKonstanz.shib.disco.metadata.IdPMeta;
 import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
 
 /**
@@ -39,7 +40,9 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	public static final String IDP_COOKIE = "shibboleth-discovery";
 	/** Make the cookie last for a year before it spoils. */
 	private static final int COOKIE_LIFETIME = 60 * 60 * 24 * 365;
-	private LoadingCache<LoginTuple, Counter> counter;
+	/** Maximum size for login counter cache. */
+	private static final int MAX_LOGIN_CACHE = 262144;
+	private LoadingCache<LoginTuple, LoginTuple> counter;
 	private DatabaseWorkerThread updateThread;
 	private DatabaseCleanupThread cleanupThread;
 	private CounterFlushThread flushThread;
@@ -49,26 +52,31 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	public void init() throws ServletException {
 		super.init();
 		updateThread = new DatabaseWorkerThread(getDatabaseConnection());
-		// note: separate database; they cannot be shared safely
+		// note: separate database connection; they cannot be shared safely
 		cleanupThread = new DatabaseCleanupThread(getDatabaseConnection());
 
 		if (!defaultLogin.startsWith("https://"))
-			LOGGER.warning("shibboleth login URL isn't absolute or non-SSL: "
+			LOGGER.warning("shibboleth login URL is relative or non-SSL: "
 					+ defaultLogin);
 
-		// cache abused as a way of aggregating counts for 10 minutes
+		// cache abused as a way of aggregating counts for 10 minutes.
+		// cache size is limited so that the memory consumption cannot grow
+		// without limit: each object is ~32 bytes (2 ints, a reference,
+		// overhead) plus overhead for the map, so 262144 entries should be on
+		// the order of 8-32 MB, which is still less than an idle Tomcat serving
+		// zero webapps.
 		counter = CacheBuilder.newBuilder()
 				.expireAfterWrite(10, TimeUnit.MINUTES)
-				.maximumSize(AbstractShibbolethServlet.MAX_IDPS)
-				.removalListener(new RemovalListener<LoginTuple, Counter>() {
+				.maximumSize(MAX_LOGIN_CACHE)
+				.removalListener(new RemovalListener<LoginTuple, LoginTuple>() {
 					public void onRemoval(
-							final RemovalNotification<LoginTuple, Counter> entry) {
-						updateThread.enqueue(entry);
+							final RemovalNotification<LoginTuple, LoginTuple> entry) {
+						updateThread.enqueue(entry.getKey());
 					}
-				}).build(new CacheLoader<LoginTuple, Counter>() {
+				}).build(new CacheLoader<LoginTuple, LoginTuple>() {
 					@Override
-					public Counter load(final LoginTuple key) {
-						return new Counter();
+					public LoginTuple load(final LoginTuple key) {
+						return key;
 					}
 				});
 		flushThread = new CounterFlushThread(counter);
@@ -117,9 +125,10 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		// anyway, to avoid becoming an unnecessary point of failure.
 		final int ipHash = getClientNetworkHash(req);
 		if (ipHash >= 0) {
-			if (isEntityIDValid(entityID)) {
-				final LoginTuple key = new LoginTuple(ipHash, entityID);
-				counter.getUnchecked(key).increment();
+			final IdPMeta idp = getEntityID(entityID);
+			if (idp != null) {
+				final LoginTuple key = new LoginTuple(ipHash, idp);
+				counter.getUnchecked(key).incrementCounter();
 			} else
 				LOGGER.info("login request with unknown entityID=" + entityID
 						+ " from " + req.getRemoteAddr());
@@ -162,13 +171,15 @@ public class LoginServlet extends AbstractShibbolethServlet {
 
 	/**
 	 * Checks if an entityID is valid for logging, ie. present in Shibboleth's
-	 * metadata.
+	 * metadata. If present, returns the {@link IdPMeta} object, else
+	 * <code>null</code>.
 	 * 
 	 * @param entityID
 	 *            entityID to check
-	 * @return <code>true</code> if it is in the metadata
+	 * @return the metadata object, or <code>null</code> if not present in the
+	 *         metadata
 	 */
-	private boolean isEntityIDValid(final String entityID) {
+	private IdPMeta getEntityID(final String entityID) {
 		// get MetadataUpdateThread from DiscoveryServlet. unlocked, but the
 		// value never changes anyway, and two threads writing the same value
 		// should be safe.
@@ -177,8 +188,8 @@ public class LoginServlet extends AbstractShibbolethServlet {
 					MetadataUpdateThread.class.getCanonicalName());
 		if (meta == null) {
 			LOGGER.info("no metadata yet; not logging " + entityID);
-			return false;
+			return null;
 		}
-		return meta.hasMetadata(entityID);
+		return meta.getMetadata(entityID);
 	}
 }

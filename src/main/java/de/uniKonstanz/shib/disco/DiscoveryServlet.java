@@ -75,13 +75,13 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		wayf = normalize(getResourceAsString("wayf.html"));
 		bookmarkNotice = normalize(getResourceAsString("bookmark-notice.html"));
 
-		db = getDatabaseConnection();
-		ranking = new IdPRanking(db, numTopIdPs);
 		// start MetadataUpdateThread and make it available to LoginServlet
 		meta = new MetadataUpdateThread(discoFeed, getLogoCacheDir());
 		meta.start();
 		getServletContext().setAttribute(
 				MetadataUpdateThread.class.getCanonicalName(), meta);
+		db = getDatabaseConnection();
+		ranking = new IdPRanking(db, meta, numTopIdPs);
 	}
 
 	@Override
@@ -297,10 +297,11 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	 */
 	private void addNethashFavorites(final Collection<IdPMeta> list,
 			final HttpServletRequest req) {
-		final List<String> entities = ranking
+		final IdPMeta[] entities = ranking
 				.getIdPList(getClientNetworkHash(req));
 		if (entities != null)
-			meta.addMetadata(list, entities);
+			for (final IdPMeta e : entities)
+				list.add(e);
 	}
 
 	/**
@@ -308,9 +309,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	 * and inserts them into the given list.
 	 */
 	private void addGlobalFavorites(final LinkedHashSet<IdPMeta> list) {
-		final List<String> entities = ranking.getGlobalIdPList();
+		final IdPMeta[] entities = ranking.getGlobalIdPList();
 		if (entities != null)
-			meta.addMetadata(list, entities);
+			for (final IdPMeta e : entities)
+				list.add(e);
 	}
 
 	/**

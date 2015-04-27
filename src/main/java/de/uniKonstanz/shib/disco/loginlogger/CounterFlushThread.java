@@ -20,13 +20,13 @@ public class CounterFlushThread extends Thread {
 	 * is required is that they do get flushed eventually.
 	 */
 	private static final long INTERVAL = 30 * 60 * 1000;
-	private final LoadingCache<LoginTuple, Counter> counter;
+	private final LoadingCache<LoginTuple, LoginTuple> counter;
 
 	/**
 	 * @param counter
 	 *            the {@link LoadingCache} to flush periodically
 	 */
-	public CounterFlushThread(final LoadingCache<LoginTuple, Counter> counter) {
+	public CounterFlushThread(final LoadingCache<LoginTuple, LoginTuple> counter) {
 		super("counter flush worker");
 		this.counter = counter;
 	}

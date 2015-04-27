@@ -1,21 +1,49 @@
 package de.uniKonstanz.shib.disco.loginlogger;
 
+import de.uniKonstanz.shib.disco.metadata.IdPMeta;
+
 /**
- * A simple IdP-nethash tuple for logging of logins.
+ * Represents a combination of IdP and nethash for logging of logins, and keeps
+ * track of the number of logins for that combination.
  */
 public final class LoginTuple {
 	private final int ipHash;
 	private final String entityID;
+	private int count;
 
 	/**
 	 * @param ipHash
 	 *            client network hash
-	 * @param entityID
-	 *            entityID of chose IdP
+	 * @param idp
+	 *            the IdP that was chosen, represented by its {@link IdPMeta}
+	 *            object
 	 */
-	public LoginTuple(final int ipHash, final String entityID) {
+	public LoginTuple(final int ipHash, final IdPMeta idp) {
 		this.ipHash = ipHash;
-		this.entityID = entityID;
+		// note that this is the same String object for every login. this
+		// avoids holding many copies of identical strings just because they
+		// were read from different places.
+		entityID = idp.getEntityID();
+	}
+
+	/**
+	 * Gets the current counter value.
+	 * 
+	 * @return current value
+	 */
+	public final int getCount() {
+		return count;
+	}
+
+	/**
+	 * Increments the counter value by 1.
+	 */
+	public final void incrementCounter() {
+		// unsynchronized, ie. might lose counts. if this happens frequently,
+		// there must be many counts for this combination, and then losing some
+		// is ok. if it doesn't happen frequently, then there is no problem to
+		// begin with.
+		count++;
 	}
 
 	@Override

@@ -16,6 +16,8 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
+import de.uniKonstanz.shib.disco.metadata.IdPMeta;
+import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 import de.uniKonstanz.shib.disco.util.ReconnectingQuery;
 
@@ -27,19 +29,23 @@ public class IdPRanking {
 	private static final Logger LOGGER = Logger.getLogger(IdPRanking.class
 			.getCanonicalName());
 	private final ReconnectingQuery<List<String>, Integer> stmt;
-	private final LoadingCache<Integer, List<String>> cache;
+	private final LoadingCache<Integer, IdPMeta[]> cache;
 	private final int numIdPs;
 	private ReconnectingQuery<List<String>, Void> globalStmt;
 
 	/**
 	 * @param db
 	 *            the {@link ReconnectingDatabase} to load data from
+	 * @param meta
+	 *            the {@link MetadataUpdateThread} containing the metadata
+	 *            objects for all IdPs
 	 * @param numIdPs
 	 *            number of IdPs to return for each query
 	 * @throws ServletException
 	 *             if the database statement cannot be prepared
 	 */
-	public IdPRanking(final ReconnectingDatabase db, final int numIdPs)
+	public IdPRanking(final ReconnectingDatabase db,
+			final MetadataUpdateThread meta, final int numIdPs)
 			throws ServletException {
 		this.numIdPs = numIdPs;
 		try {
@@ -65,13 +71,21 @@ public class IdPRanking {
 			LOGGER.log(Level.SEVERE, "cannot prepare database statement", e);
 			throw new ServletException("cannot connect to database");
 		}
+		// no size limit. each entry is ~64 bytes (6 references, length,
+		// overhead) plus some overhead for the set, and there are at most 65k
+		// possible keys. thus the cache cannot get significantly larger than
+		// 4-40 MB anyway, which is less than Tomcat itself.
+		// no soft references either; throwing away the tiny values doesn't free
+		// enough memory to be worth the effort.
 		cache = CacheBuilder.newBuilder().expireAfterWrite(1, TimeUnit.HOURS)
-				.maximumSize(10 * AbstractShibbolethServlet.MAX_IDPS)
-				.build(new CacheLoader<Integer, List<String>>() {
+				.build(new CacheLoader<Integer, IdPMeta[]>() {
 					@Override
-					public List<String> load(final Integer key)
+					public IdPMeta[] load(final Integer key)
 							throws SQLException {
-						return loadIdPList(key);
+						final ArrayList<IdPMeta> list = new ArrayList<IdPMeta>(
+								numIdPs);
+						meta.addMetadata(list, loadIdPList(key));
+						return list.toArray(new IdPMeta[list.size()]);
 					}
 				});
 	}
@@ -93,7 +107,7 @@ public class IdPRanking {
 	 * 
 	 * @return list of up to {@link #numIdPs} entityIDs
 	 */
-	public List<String> getGlobalIdPList() {
+	public IdPMeta[] getGlobalIdPList() {
 		return getIdPList(AbstractShibbolethServlet.NETHASH_UNDEFINED);
 	}
 
@@ -102,7 +116,7 @@ public class IdPRanking {
 	 * 
 	 * @return list of up to {@link #numIdPs} entityIDs
 	 */
-	public List<String> getIdPList(final int nethash) {
+	public IdPMeta[] getIdPList(final int nethash) {
 		try {
 			return cache.get(nethash);
 		} catch (final ExecutionException e) {

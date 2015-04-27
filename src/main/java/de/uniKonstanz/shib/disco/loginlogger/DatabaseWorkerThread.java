@@ -3,7 +3,6 @@ package de.uniKonstanz.shib.disco.loginlogger;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map.Entry;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.logging.Level;
@@ -12,6 +11,7 @@ import java.util.logging.Logger;
 import javax.servlet.ServletException;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
+import de.uniKonstanz.shib.disco.metadata.IdPMeta;
 import de.uniKonstanz.shib.disco.util.ReconnectingBatchUpdate;
 import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 import de.uniKonstanz.shib.disco.util.ReconnectingUpdate;
@@ -23,26 +23,15 @@ import de.uniKonstanz.shib.disco.util.ReconnectingUpdate;
 public class DatabaseWorkerThread extends Thread {
 	private static final Logger LOGGER = Logger
 			.getLogger(DatabaseWorkerThread.class.getCanonicalName());
-	private final BlockingQueue<Entry<LoginTuple, Counter>> updateQueue = new LinkedBlockingQueue<Entry<LoginTuple, Counter>>();
+	private final BlockingQueue<LoginTuple> updateQueue = new LinkedBlockingQueue<LoginTuple>();
 	/**
 	 * Queue shutdown marker. Because Java doesn't provide one, and using
 	 * <code>null</code> isn't allowed.
 	 */
-	private static final Entry<LoginTuple, Counter> END = new Entry<LoginTuple, Counter>() {
-		public Counter setValue(final Counter value) {
-			throw new UnsupportedOperationException();
-		}
-
-		public Counter getValue() {
-			throw new UnsupportedOperationException();
-		}
-
-		public LoginTuple getKey() {
-			throw new UnsupportedOperationException();
-		}
-	};
+	private static final LoginTuple END = new LoginTuple(
+			AbstractShibbolethServlet.NETHASH_UNDEFINED, new IdPMeta(""));
 	private final ReconnectingDatabase db;
-	private final ReconnectingUpdate<List<Entry<LoginTuple, Counter>>> stmt;
+	private final ReconnectingUpdate<List<LoginTuple>> stmt;
 
 	/**
 	 * @param db
@@ -55,24 +44,23 @@ public class DatabaseWorkerThread extends Thread {
 		super("login database worker");
 		this.db = db;
 		try {
-			stmt = new ReconnectingBatchUpdate<List<Entry<LoginTuple, Counter>>>(
-					db, "insert into"
+			stmt = new ReconnectingBatchUpdate<List<LoginTuple>>(db,
+					"insert into"
 							+ " loginstats(iphash, entityid, count, created)"
 							+ " values(?, ?, ?, ?)") {
 				@Override
-				protected void exec(
-						final List<Entry<LoginTuple, Counter>> counters)
+				protected void exec(final List<LoginTuple> counters)
 						throws SQLException {
 					setInt(4, AbstractShibbolethServlet.getCurrentDay());
-					for (final Entry<LoginTuple, Counter> counter : counters) {
-						final int count = counter.getValue().get();
+					for (final LoginTuple counter : counters) {
+						final int count = counter.getCount();
 						if (count > 0) {
 							// zero counters can be created due to expiry
 							// processing. don't upload those to the database;
 							// they contain no information and slow down query
 							// processing.
-							setInt(1, counter.getKey().getIpHash());
-							setString(2, counter.getKey().getEntityID());
+							setInt(1, counter.getIpHash());
+							setString(2, counter.getEntityID());
 							setInt(3, count);
 							addBatch();
 						}
@@ -90,10 +78,9 @@ public class DatabaseWorkerThread extends Thread {
 	 * Enqueues a counter for upload to the database.
 	 * 
 	 * @param count
-	 *            the {@link LoginTuple} and {@link Counter} describing the
-	 *            count
+	 *            the {@link LoginTuple} containing the count
 	 */
-	public void enqueue(final Entry<LoginTuple, Counter> count) {
+	public void enqueue(final LoginTuple count) {
 		// if this fails, we lose a count. that's better than blocking the
 		// request.
 		updateQueue.offer(count);
@@ -124,7 +111,7 @@ public class DatabaseWorkerThread extends Thread {
 	@Override
 	public void run() {
 		while (!interrupted()) {
-			final List<Entry<LoginTuple, Counter>> counters;
+			final List<LoginTuple> counters;
 			try {
 				counters = takeNext();
 			} catch (final InterruptedException e) {
@@ -136,20 +123,19 @@ public class DatabaseWorkerThread extends Thread {
 		db.shutdown();
 	}
 
-	private List<Entry<LoginTuple, Counter>> takeNext()
-			throws InterruptedException {
-		final Entry<LoginTuple, Counter> counter = updateQueue.take();
+	private List<LoginTuple> takeNext() throws InterruptedException {
+		final LoginTuple counter = updateQueue.take();
 		if (counter == END)
 			throw new InterruptedException("end of queue");
 
-		final List<Entry<LoginTuple, Counter>> counters = new ArrayList<Entry<LoginTuple, Counter>>();
+		final List<LoginTuple> counters = new ArrayList<LoginTuple>();
 		counters.add(counter);
 
 		// there could be more than 1 element in the queue. if so, push them all
 		// to the database in a single operation. this is more efficient than
 		// pushing them one by one.
 		while (true) {
-			final Entry<LoginTuple, Counter> head = updateQueue.poll();
+			final LoginTuple head = updateQueue.poll();
 			if (head == null)
 				break;
 			if (head == END) {
@@ -167,7 +153,7 @@ public class DatabaseWorkerThread extends Thread {
 	 * Pushes a list of counters to the database, retrying the database
 	 * operations if necessary.
 	 */
-	private void updateCount(final List<Entry<LoginTuple, Counter>> counters) {
+	private void updateCount(final List<LoginTuple> counters) {
 		if (counters.isEmpty())
 			return;
 
@@ -177,8 +163,9 @@ public class DatabaseWorkerThread extends Thread {
 			// retry failed, ie. reconnecting failed. this means the database is
 			// probably down; there is no point trying to reconnect any further.
 			// perhaps the next database connection will succeed again.
-			LOGGER.log(Level.SEVERE, "failed to update counts for "
-					+ counters.get(0).getKey() + "; database down?", e);
+			LOGGER.log(Level.SEVERE,
+					"failed to update counts for " + counters.get(0)
+							+ "; database down?", e);
 		}
 	}
 }

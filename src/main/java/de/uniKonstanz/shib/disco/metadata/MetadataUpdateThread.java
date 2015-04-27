@@ -18,7 +18,6 @@ import org.codehaus.jackson.type.TypeReference;
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.logo.LogoConverter;
 import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
-import de.uniKonstanz.shib.disco.logo.LogosServlet;
 import de.uniKonstanz.shib.disco.util.HTTP;
 
 /**
@@ -101,18 +100,18 @@ public class MetadataUpdateThread extends Thread {
 		// convert from IdP to IdPMeta and start asynchronous logo download
 		final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>();
 		for (final IdP idp : idps) {
+			// reuse existing metadata object if possible
 			final String entityID = idp.getEntityID();
-			final String logoURL = idp.getBiggestLogo();
-			final String logo;
+			final IdPMeta meta;
 			if (map != null && map.containsKey(entityID))
-				// keep previous logo if possible, to avoid the generic logo
-				// flickering in.
-				logo = map.get(entityID).getLogoFilename();
+				meta = map.get(entityID);
 			else
-				logo = LogosServlet.GENERIC_LOGO;
+				meta = new IdPMeta(entityID);
+
 			final String displayName = idp
 					.getDisplayName(AbstractShibbolethServlet.LANGUAGE);
-			final IdPMeta meta = new IdPMeta(entityID, displayName, logo);
+			meta.setDisplayName(displayName);
+			final String logoURL = idp.getBiggestLogo();
 			new LogoUpdaterThread(converter, meta, logoURL).start();
 			map.put(entityID, meta);
 		}
@@ -140,22 +139,6 @@ public class MetadataUpdateThread extends Thread {
 		if (map == null)
 			return null;
 		return map.get(entityID);
-	}
-
-	/**
-	 * Checks whether metadata is available for a particular IdP, given its
-	 * entityID.
-	 * 
-	 * @param entityID
-	 *            identifies the IdP
-	 * @return <code>true</code> iff {@link #getMetadata(String)} would return
-	 *         non-<code>null</code>
-	 */
-	public boolean hasMetadata(final String entityID) {
-		final Map<String, IdPMeta> map = metadata;
-		if (map == null)
-			return false;
-		return map.containsKey(entityID);
 	}
 
 	/**

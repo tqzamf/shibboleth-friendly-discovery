@@ -22,7 +22,6 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 
-import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.util.HTTP;
 
 /**
@@ -64,8 +63,9 @@ public class LogoConverter {
 		// it's still the same file. this means that changing the IdP logo can
 		// take a while to apply, but those logos shouldn't change frequently in
 		// any case.
+		// no maximum size. there is just one element per IdP, and it's just a
+		// small filename.
 		cache = CacheBuilder.newBuilder().expireAfterAccess(6, TimeUnit.HOURS)
-				.maximumSize(AbstractShibbolethServlet.MAX_IDPS)
 				.build(new CacheLoader<String, File>() {
 					@Override
 					public File load(final String key) throws IOException,

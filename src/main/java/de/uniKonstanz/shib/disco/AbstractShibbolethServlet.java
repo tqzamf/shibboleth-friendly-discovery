@@ -44,16 +44,6 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	public static final String ENCODING = "UTF-8";
 	public static final Charset ENCODING_CHARSET = Charset.forName(ENCODING);
 	/**
-	 * Number of supported IdPs. It will handle more, but performance will
-	 * suffer. If set to a value that is too large, memory consumption can
-	 * become excessive.
-	 * 
-	 * 1000 was chosen because at that point, usability will already suffer
-	 * severely because of the long page for full discovery, so it makes sense
-	 * to choose a different discovery provider instead of raising the limit.
-	 */
-	public static final int MAX_IDPS = 1000;
-	/**
 	 * Preferred language for IdP DisplayNames. Note that changing the UI
 	 * language requires changing the resources, and thus requires recompiling
 	 * the wabapp anyway.

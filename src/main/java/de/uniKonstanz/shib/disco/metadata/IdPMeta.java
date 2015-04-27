@@ -8,6 +8,7 @@ import com.google.common.html.HtmlEscapers;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
+import de.uniKonstanz.shib.disco.logo.LogosServlet;
 
 /**
  * Data class to represent an IdP in memory. Holds entityID, display name and
@@ -16,17 +17,13 @@ import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
 public class IdPMeta implements Comparable<IdPMeta> {
 	private static final Escaper HTML_ESCAPER = HtmlEscapers.htmlEscaper();
 	private final String entityID;
-	private final String displayName;
+	private String displayName;
 	private String logo;
 	private final String encEntityID;
-	private final String escDisplayName;
+	private String escDisplayName;
 
-	public IdPMeta(final String entityID, final String displayName,
-			final String logo) {
+	public IdPMeta(final String entityID) {
 		this.entityID = entityID;
-		final String normalizedDisplayName = displayName
-				.replaceAll("\\s+", " ").trim();
-		this.logo = logo;
 		try {
 			encEntityID = URLEncoder.encode(entityID,
 					AbstractShibbolethServlet.ENCODING);
@@ -34,8 +31,10 @@ public class IdPMeta implements Comparable<IdPMeta> {
 			throw new RuntimeException("no support for "
 					+ AbstractShibbolethServlet.ENCODING, e);
 		}
-		this.displayName = normalizedDisplayName.toLowerCase();
-		escDisplayName = HTML_ESCAPER.escape(normalizedDisplayName);
+
+		// dummy initial values
+		logo = LogosServlet.GENERIC_LOGO;
+		displayName = entityID;
 	}
 
 	/**
@@ -46,6 +45,20 @@ public class IdPMeta implements Comparable<IdPMeta> {
 	 */
 	public String getEscapedDisplayName() {
 		return escDisplayName;
+	}
+
+	/**
+	 * Changes the display name.
+	 * 
+	 * @param displayName
+	 *            the new, raw display name
+	 */
+	public void setDisplayName(final String displayName) {
+		final String normalizedDisplayName = displayName
+				.replaceAll("\\s+", " ").trim();
+		// note: unsynchronized, thus possibly inconsistent. causes no damage.
+		this.displayName = normalizedDisplayName.toLowerCase();
+		escDisplayName = HTML_ESCAPER.escape(normalizedDisplayName);
 	}
 
 	/**

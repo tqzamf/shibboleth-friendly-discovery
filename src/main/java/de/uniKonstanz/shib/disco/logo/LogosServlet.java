@@ -52,7 +52,7 @@ public class LogosServlet extends AbstractShibbolethServlet {
 		// IdP, without unnecessarily expiring logos that are used frequently,
 		// but only in a daily usage pattern.
 		// uses soft values as a backup measure to avoid excessive memory
-		// consumption.
+		// consumption. the average logo is ~12KB; this could start adding up.
 		cache = CacheBuilder.newBuilder().expireAfterAccess(1, TimeUnit.DAYS)
 				.softValues().build(new CacheLoader<String, byte[]>() {
 					@Override
