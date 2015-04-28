@@ -241,8 +241,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	 * </ol>
 	 */
 	private List<IdPMeta> getIdPList(final HttpServletRequest req) {
+		// known maximum size: favorite, and perhaps two lists of numTopIdPs
+		// entries
 		final LinkedHashSet<IdPMeta> list = new LinkedHashSet<IdPMeta>(
-				numTopIdPs);
+				1 + 2 * numTopIdPs);
 		addCookieFavorite(list, req);
 		addNethashFavorites(list, req);
 		if (list.size() < numTopIdPs)

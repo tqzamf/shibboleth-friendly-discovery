@@ -128,7 +128,10 @@ public class DatabaseWorkerThread extends Thread {
 		if (counter == END)
 			throw new InterruptedException("end of queue");
 
-		final List<LoginTuple> counters = new ArrayList<LoginTuple>();
+		// already allocate space for all items in queue. leave 20% slack in
+		// case more entries come in.
+		final List<LoginTuple> counters = new ArrayList<LoginTuple>(
+				1 + 5 * updateQueue.size() / 4);
 		counters.add(counter);
 
 		// there could be more than 1 element in the queue. if so, push them all
@@ -141,6 +144,8 @@ public class DatabaseWorkerThread extends Thread {
 			if (head == END) {
 				// retain the end marker for next iteration; we still have to
 				// push what we have collected so far.
+				// note: this is the reason we cannot just use
+				// updateQueue.drainTo(counters);
 				updateQueue.add(END);
 				break;
 			}

@@ -98,7 +98,8 @@ public class MetadataUpdateThread extends Thread {
 		}
 
 		// convert from IdP to IdPMeta and start asynchronous logo download
-		final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>();
+		final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>(
+				idps.size());
 		for (final IdP idp : idps) {
 			// reuse existing metadata object if possible
 			final String entityID = idp.getEntityID();
