@@ -105,13 +105,24 @@ abstract class ReconnectingStatement<T> {
 	 * @param e
 	 */
 	void handleException(final SQLException e) {
-		LOGGER.log(Level.WARNING, "failed to execute statement");
+		LOGGER.log(Level.WARNING, "failed to execute statement", e);
+
+		if (transaction)
+			// if using transactions, roll back any ongoing transactions because
+			// they will have to be restared from scratch. if the connection is
+			// dead, this will fail, but then it won't be necessary anyway.
+			try {
+				conn.rollback();
+			} catch (final SQLException e1) {
+				LOGGER.log(Level.WARNING, "failed to rollback", e1);
+			}
+
 		try {
 			stmt.close();
 		} catch (final SQLException e1) {
 			// failed to close the statement. let's hope it will be
 			// correctly reclaimed by garbage collection.
-			LOGGER.log(Level.WARNING, "failed to close statement", e);
+			LOGGER.log(Level.WARNING, "failed to close statement", e1);
 		}
 		stmt = null;
 	}
@@ -130,6 +141,8 @@ abstract class ReconnectingStatement<T> {
 	/** Wraps {@link PreparedStatement#executeUpdate()}. */
 	void executeUpdate() throws SQLException {
 		stmt.executeUpdate();
+		if (transaction)
+			conn.commit();
 	}
 
 	/** Wraps {@link PreparedStatement#executeQuery()}. */
@@ -145,10 +158,7 @@ abstract class ReconnectingStatement<T> {
 	/** Wraps {@link PreparedStatement#executeBatch()}. */
 	void executeBatch() throws SQLException {
 		stmt.executeBatch();
-	}
-
-	/** Wraps {@link Connection#commit()}. */
-	void commit() throws SQLException {
-		conn.commit();
+		if (transaction)
+			conn.commit();
 	}
 }
