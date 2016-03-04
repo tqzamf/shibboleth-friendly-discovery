@@ -46,8 +46,6 @@ public class IdentIcon {
 	private final Point TL, TC, TR;
 	private final Point CL, CC, CR;
 	private final Point BL, BC, BR;
-	private final Point TLI, TRI;
-	private final Point BLI, BRI;
 	private final int w;
 	private final int h;
 
@@ -74,10 +72,6 @@ public class IdentIcon {
 		BL = new Point(0, dim);
 		BC = new Point(dim / 2, dim);
 		BR = new Point(dim, dim);
-		TLI = new Point(dim / 4, dim / 4);
-		TRI = new Point(dim - dim / 4, dim / 4);
-		BLI = new Point(dim / 4, dim - dim / 4);
-		BRI = new Point(dim - dim / 4, dim - dim / 4);
 	}
 
 	/**
@@ -154,23 +148,20 @@ public class IdentIcon {
 				case 13:
 					poly(g, BL, CC, BR);
 					break;
-				case 2: // 2 triangles pointing center (symmetric)
-				case 10:
-					poly(g, TL, TR, BL, BR);
-					break;
+				case 2: // rectangle in top-left corner
 				case 6:
-				case 14: // diagonal (asymmetric)
-					poly(g, TL, BR, TR);
+				case 10:
+				case 14:
+					poly(g, TL, TC, CC, CL);
 					break;
-				case 7: // top half filled
-				case 15:
+				case 3: // top half filled (symmetric wrt 180° rotation)
+				case 7:
 					poly(g, TL, TR, CR, CL);
 					break;
-				case 11: // rhombus (2-way symmetrical)
-					poly(g, TC, CR, BC, CL);
-					break;
-				case 3: // small centered rectangle (2-way symmetrical)
-					poly(g, TLI, TRI, BRI, BLI);
+				case 11: // diagonal blocks (symmetric wrt 180° rotation)
+				case 15:
+					poly(g, TL, TC, CC, CL);
+					poly(g, BR, BC, CC, CR);
 					break;
 				}
 				g.setTransform(tfm);

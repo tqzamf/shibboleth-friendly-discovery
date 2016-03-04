@@ -73,7 +73,7 @@ public class LogoConverter {
 						return convertLogo(key);
 					}
 				});
-		ident = new IdentIcon(37, 4, 2);
+		ident = new IdentIcon(74, 2, 1);
 	}
 
 	/**
