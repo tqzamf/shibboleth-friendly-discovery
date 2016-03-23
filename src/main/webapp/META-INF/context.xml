@@ -2,6 +2,7 @@
 <Context copyXML="true">
 	<Resource name="jdbc/database" auth="Container" type="javax.sql.DataSource"
 		maxActive="10" maxIdle="4" driverClassName="org.postgresql.Driver" closeMethod="close"
+		validationQuery="SELECT 1" testOnBorrow="true"
 	 	username="shibdisco" password="secret" url="jdbc:postgresql://localhost/shibdisco?ssl=true"
 	 	description="JDBC database connection config as a DataSource resource" />
 
