@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Context copyXML="true">
-	<Parameter name="database.jdbc.driver" value="org.postgresql.Driver"
-		description="canonical name of JDBC driver class" />
-	<Parameter name="database.jdbc.url"
-		value="jdbc:postgresql://localhost/shibdisco?user=shibdisco&amp;password=secret"
-		description="full JDBC connection URL, including username and password" />
+	<Resource name="jdbc/database" auth="Container" type="javax.sql.DataSource"
+		maxActive="10" maxIdle="4" driverClassName="org.postgresql.Driver" closeMethod="close"
+	 	username="shibdisco" password="secret" url="jdbc:postgresql://localhost/shibdisco?ssl=true"
+	 	description="JDBC database connection config as a DataSource resource" />
 
 	<Parameter name="shibboleth.discofeed.url" value="http://localhost/Shibboleth.sso/DiscoFeed"
 		description="absolute URL to /Shibboleth.sso/DiscoFeed, either localhost or using SSL" />

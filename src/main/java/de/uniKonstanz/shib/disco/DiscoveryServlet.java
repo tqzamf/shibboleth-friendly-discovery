@@ -18,7 +18,7 @@ import de.uniKonstanz.shib.disco.loginlogger.LoginParams;
 import de.uniKonstanz.shib.disco.loginlogger.LoginServlet;
 import de.uniKonstanz.shib.disco.metadata.IdPMeta;
 import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
-import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
+import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
  * Handles the discovery itself, providing 3 flavors of discovery:
@@ -47,7 +47,7 @@ import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
 public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private static final Logger LOGGER = Logger
 			.getLogger(DiscoveryServlet.class.getCanonicalName());
-	private ReconnectingDatabase db;
+	private ConnectionPool db;
 	private MetadataUpdateThread meta;
 	private String discoFeed;
 	private String friendlyHeader;
@@ -80,7 +80,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		meta.start();
 		getServletContext().setAttribute(
 				MetadataUpdateThread.class.getCanonicalName(), meta);
-		db = getDatabaseConnection();
+		db = getDatabaseConnectionPool();
 		ranking = new IdPRanking(db, meta, numTopIdPs);
 	}
 
@@ -90,7 +90,6 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		getServletContext().removeAttribute(
 				MetadataUpdateThread.class.getCanonicalName());
 		meta.interrupt();
-		db.shutdown();
 	}
 
 	/** Normalize whitespace. Not safe to use on untrusted data. */

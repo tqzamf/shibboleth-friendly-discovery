@@ -19,6 +19,7 @@ import com.google.common.cache.RemovalNotification;
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.metadata.IdPMeta;
 import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
+import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
  * Logs login requests, then redirects to the actual shibboleth login URL.
@@ -51,9 +52,9 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	@Override
 	public void init() throws ServletException {
 		super.init();
-		updateThread = new DatabaseWorkerThread(getDatabaseConnection());
-		// note: separate database connection; they cannot be shared safely
-		cleanupThread = new DatabaseCleanupThread(getDatabaseConnection());
+		final ConnectionPool db = getDatabaseConnectionPool();
+		updateThread = new DatabaseWorkerThread(db);
+		cleanupThread = new DatabaseCleanupThread(db);
 
 		if (!defaultLogin.startsWith("https://"))
 			LOGGER.warning("shibboleth login URL is relative or non-SSL: "
@@ -69,6 +70,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 				.expireAfterWrite(10, TimeUnit.MINUTES)
 				.maximumSize(MAX_LOGIN_CACHE)
 				.removalListener(new RemovalListener<LoginTuple, LoginTuple>() {
+					@Override
 					public void onRemoval(
 							final RemovalNotification<LoginTuple, LoginTuple> entry) {
 						updateThread.enqueue(entry.getKey());

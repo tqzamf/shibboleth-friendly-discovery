@@ -7,7 +7,6 @@ import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
-import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -29,7 +28,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.net.InetAddresses;
 
 import de.uniKonstanz.shib.disco.loginlogger.LoginParams;
-import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
+import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
  * Methods common to all servlets.
@@ -115,25 +114,16 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 * Opens a database connection according to the configuration in the
 	 * {@link ServletContext}.
 	 * 
-	 * @return a {@link ReconnectingDatabase}
+	 * @return a {@link ConnectionPool}
 	 * @throws ServletException
 	 *             if the required context parameters don't exist
 	 */
-	protected ReconnectingDatabase getDatabaseConnection()
+	protected ConnectionPool getDatabaseConnectionPool()
 			throws ServletException {
-		final String jdbcDriver = getContextParameter("database.jdbc.driver");
 		try {
-			Class.forName(jdbcDriver);
-		} catch (final ClassNotFoundException e) {
-			LOGGER.log(Level.SEVERE, "cannot load JDBC driver " + jdbcDriver, e);
-			throw new ServletException("cannot connect to database");
-		}
-
-		final String dbURL = getContextParameter("database.jdbc.url");
-		try {
-			return new ReconnectingDatabase(dbURL);
-		} catch (final SQLException e) {
-			LOGGER.log(Level.SEVERE, "cannot connect to database " + dbURL, e);
+			return new ConnectionPool();
+		} catch (final Exception e) {
+			LOGGER.log(Level.SEVERE, "cannot connect to database", e);
 			throw new ServletException("cannot connect to database");
 		}
 	}

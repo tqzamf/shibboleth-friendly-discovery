@@ -1,5 +1,6 @@
 package de.uniKonstanz.shib.disco.loginlogger;
 
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -7,8 +8,8 @@ import java.util.logging.Logger;
 import javax.servlet.ServletException;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
-import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
-import de.uniKonstanz.shib.disco.util.ReconnectingUpdate;
+import de.uniKonstanz.shib.disco.util.AutoRetryStatement;
+import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
  * Background threads for {@link LoginServlet} that asynchronously removes
@@ -19,36 +20,31 @@ public class DatabaseCleanupThread extends Thread {
 			.getLogger(DatabaseCleanupThread.class.getCanonicalName());
 	/**
 	 * Clean up every 24 hours. This may cause database timeouts, but the
-	 * {@link ReconnectingDatabase} will perform correct retries, and proper
-	 * databases don't time out anyway.
+	 * {@link ConnectionPool} will perform correct retries, and proper databases don't
+	 * time out anyway.
 	 */
 	private static final long INTERVAL = 24 * 60 * 60 * 1000;
-	private final ReconnectingDatabase db;
-	private final ReconnectingUpdate<Integer> stmt;
+	private final AutoRetryStatement<Void, Integer> cleanup;
 
 	/**
 	 * @param db
-	 *            the {@link ReconnectingDatabase} to push values to
+	 *            the {@link ConnectionPool} to push values to
 	 * @throws ServletException
 	 *             if the database statement cannot be prepared
 	 */
-	public DatabaseCleanupThread(final ReconnectingDatabase db)
-			throws ServletException {
+	public DatabaseCleanupThread(final ConnectionPool db) throws ServletException {
 		super("database cleanup thread");
-		this.db = db;
-		try {
-			stmt = new ReconnectingUpdate<Integer>(db, "delete from loginstats"
-					+ " where created < ? or count <= 0", false) {
-				@Override
-				protected void exec(final Integer day) throws SQLException {
-					setInt(1, day);
-					executeUpdate();
-				}
-			};
-		} catch (final SQLException e) {
-			LOGGER.log(Level.SEVERE, "cannot prepare database statement", e);
-			throw new ServletException("cannot connect to database");
-		}
+		cleanup = new AutoRetryStatement<Void, Integer>(db,
+				"delete from loginstats" + " where created < ? or count <= 0",
+				false) {
+			@Override
+			protected Void exec(final PreparedStatement stmt, final Integer day)
+					throws SQLException {
+				stmt.setInt(1, day);
+				stmt.executeUpdate();
+				return null;
+			}
+		};
 	}
 
 	/**
@@ -79,8 +75,6 @@ public class DatabaseCleanupThread extends Thread {
 				break;
 			}
 		}
-
-		db.shutdown();
 	}
 
 	/**
@@ -89,7 +83,7 @@ public class DatabaseCleanupThread extends Thread {
 	 */
 	private void cleanup(final int day) {
 		try {
-			stmt.executeUpdate(day);
+			cleanup.execute(day);
 		} catch (final SQLException e) {
 			// retry faile, ie. reconnecting failed. this means the database is
 			// probably down; there is no point trying to reconnect any further.

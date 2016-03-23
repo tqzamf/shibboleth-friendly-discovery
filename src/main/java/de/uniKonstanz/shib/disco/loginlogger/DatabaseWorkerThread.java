@@ -1,5 +1,6 @@
 package de.uniKonstanz.shib.disco.loginlogger;
 
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,9 +13,8 @@ import javax.servlet.ServletException;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.metadata.IdPMeta;
-import de.uniKonstanz.shib.disco.util.ReconnectingBatchUpdate;
-import de.uniKonstanz.shib.disco.util.ReconnectingDatabase;
-import de.uniKonstanz.shib.disco.util.ReconnectingUpdate;
+import de.uniKonstanz.shib.disco.util.AutoRetryStatement;
+import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
  * Background threads for {@link LoginServlet} that asynchronously pushes the
@@ -30,48 +30,41 @@ public class DatabaseWorkerThread extends Thread {
 	 */
 	private static final LoginTuple END = new LoginTuple(
 			AbstractShibbolethServlet.NETHASH_UNDEFINED, new IdPMeta(""));
-	private final ReconnectingDatabase db;
-	private final ReconnectingUpdate<List<LoginTuple>> stmt;
+	private final AutoRetryStatement<Void, List<LoginTuple>> updateCounts;
 
 	/**
 	 * @param db
-	 *            the {@link ReconnectingDatabase} to push values to
+	 *            the {@link ConnectionPool} to push values to
 	 * @throws ServletException
 	 *             if the database statement cannot be prepared
 	 */
-	public DatabaseWorkerThread(final ReconnectingDatabase db)
+	public DatabaseWorkerThread(final ConnectionPool db)
 			throws ServletException {
 		super("login database worker");
-		this.db = db;
-		try {
-			stmt = new ReconnectingBatchUpdate<List<LoginTuple>>(db,
-					"insert into"
-							+ " loginstats(iphash, entityid, count, created)"
-							+ " values(?, ?, ?, ?)") {
-				@Override
-				protected void exec(final List<LoginTuple> counters)
-						throws SQLException {
-					setInt(4, AbstractShibbolethServlet.getCurrentDay());
-					for (final LoginTuple counter : counters) {
-						final int count = counter.getCount();
-						if (count > 0) {
-							// zero counters can be created due to expiry
-							// processing. don't upload those to the database;
-							// they contain no information and slow down query
-							// processing.
-							setInt(1, counter.getIpHash());
-							setString(2, counter.getEntityID());
-							setInt(3, count);
-							addBatch();
-						}
+
+		updateCounts = new AutoRetryStatement<Void, List<LoginTuple>>(db,
+				"insert into loginstats(iphash, entityid, count, created)"
+						+ " values(?, ?, ?, ?)", true) {
+			@Override
+			protected Void exec(final PreparedStatement stmt,
+					final List<LoginTuple> counters) throws SQLException {
+				stmt.setInt(4, AbstractShibbolethServlet.getCurrentDay());
+				for (final LoginTuple counter : counters) {
+					final int count = counter.getCount();
+					// zero counters can be created due to expiry processing.
+					// don't upload those to the database; they contain no
+					// information and slow down query processing.
+					if (count > 0) {
+						stmt.setInt(1, counter.getIpHash());
+						stmt.setString(2, counter.getEntityID());
+						stmt.setInt(3, count);
+						stmt.addBatch();
 					}
-					executeUpdate();
 				}
-			};
-		} catch (final SQLException e) {
-			LOGGER.log(Level.SEVERE, "cannot prepare database statement", e);
-			throw new ServletException("cannot connect to database");
-		}
+				stmt.executeBatch();
+				return null;
+			}
+		};
 	}
 
 	/**
@@ -119,8 +112,6 @@ public class DatabaseWorkerThread extends Thread {
 			}
 			updateCount(counters);
 		}
-
-		db.shutdown();
 	}
 
 	private List<LoginTuple> takeNext() throws InterruptedException {
@@ -163,7 +154,7 @@ public class DatabaseWorkerThread extends Thread {
 			return;
 
 		try {
-			stmt.executeUpdate(counters);
+			updateCounts.execute(counters);
 		} catch (final SQLException e) {
 			// retry failed, ie. reconnecting failed. this means the database is
 			// probably down; there is no point trying to reconnect any further.
