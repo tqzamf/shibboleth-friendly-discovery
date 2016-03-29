@@ -24,7 +24,7 @@ public class ConnectionPool {
 	public ConnectionPool() throws SQLException, NamingException {
 		final InitialContext context = new InitialContext();
 		final Context env = (Context) context.lookup("java:/comp/env");
-		dataSource = (DataSource) env.lookup("jdbc/database");
+		dataSource = (DataSource) env.lookup("jdbc.database");
 	}
 
 	/**

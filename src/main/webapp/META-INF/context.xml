@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Context copyXML="true">
-	<Resource name="jdbc/database" auth="Container" type="javax.sql.DataSource"
-		maxActive="10" maxIdle="4" driverClassName="org.postgresql.Driver" closeMethod="close"
-		validationQuery="SELECT 1" testOnBorrow="true"
-	 	username="shibdisco" password="secret" url="jdbc:postgresql://localhost/shibdisco?ssl=true"
+	<Resource name="jdbc.database" auth="Container" type="javax.sql.DataSource"
+		validationQuery="SELECT 1" testOnBorrow="true" closeMethod="close"
+		driverClassName="org.postgresql.Driver" username="shibdisco" password="secret"
+		url="jdbc:postgresql://localhost/shibdisco?ssl=true" maxActive="10" maxIdle="4"
 	 	description="JDBC database connection config as a DataSource resource" />
 
 	<Parameter name="shibboleth.discofeed.url" value="http://localhost/Shibboleth.sso/DiscoFeed"

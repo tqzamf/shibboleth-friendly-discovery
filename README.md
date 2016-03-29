@@ -10,6 +10,7 @@ this means:
 * IdPs selection by large, easy-to-aim-for buttons (no more tiny
   dropdowns)
 * shows logos for all IdPs to aid identification
+	* auto-generated random logos if necessary
 * adaptively tries to guess most likely IdP
 	* least recently used (cookie)
 	* most popular by /16 (IPv4) or /48 (IPv6) IP block
@@ -52,9 +53,7 @@ How to deploy
 	sudo -u postgres createdb shibdisco
 	```
 
-	non-PostgreSQL databases are possible, but will require adding their
-	driver as a library when deploying the servlet. the postgresql driver
-	is built-in.
+	non-PostgreSQL databases should be possible.
 
 2. create the tables. for PostgreSQL, this means executing the statements
 	from `tables.sql`:
@@ -82,10 +81,14 @@ How to deploy
 	permission, but it doesn't allow anything that `DELETE` + `INSERT`
 	doesn't already permit anyway.
 
-4. deploy the servlet, by copying it into Tomcat's `webapps` directory:
+4. deploy the servlet, by copying it into Tomcat's `webapps` directory
+	and adding the database connector for the database to be used to the
+	`lib` directory (which on Ubuntu has to be created first):
 
 	```bash
 	sudo cp shib.disco-*.war /var/lib/tomcat7/webapps/shib.disco.war
+	sudo mkdir -p /var/lib/tomcat7/lib
+	sudo cp postgresql-*.jar /var/lib/tomcat7/lib/
 	```
 
 	it makes sense to drop the version in the `webapps` directory,
@@ -144,13 +147,18 @@ How to deploy
 	buttons. the simplest way of embedding the discovery is:
 
 	```html
-	<script src="discovery/embed" type="text/javascript"
+	<script src=".../discovery/embed" type="text/javascript"
 		id="shibboleth-discovery" defer="defer"></script>
 	```
 	
 	`type="text/javascript"` is the default in HTML5 and could be omitted.
 	`defer="defer"` could also be omitted but is recommended: without it,
 	the site will block while loading the javascript snippet.
+
+	the code above this will only work if the discovery serves only one
+	SP, which can be configured as the default `login` and `target`
+	values. otherwise, add explicit `login` and `target` values as shown
+	below.
 
 	make sure there is an alternative way to initiate Shibboleth login
 	when javascript is disabled. see `/index.html` in the WAR for an
@@ -232,17 +240,38 @@ each of the discovery method takes the following parameters:
 Configuration
 -------------
 
-* `database.jdbc.driver`: generally just `org.postgresql.Driver` for
-	PostgreSQL. for other databases, in addition to setting this parameter
-	to the right JDBC driver class, you will also have to add the driver
-	to Tomcat's libraries.
+* `jdbc.database`: resource declaration for the database connection. for
+	the database connection to work, `auth` and `type` must be `Container`
+	and `javax.sql.DataSource`, respectively.
 
-* `database.jdbc.url`: the JDBC connection URL, including username and
-	password, as well as any other options you would like to set. see the
-	PostgreSQL documentation for the full syntax, or just adapt the example
-	`jdbc:postgresql://localhost/shibdisco?user=shibdisco&password=secret`.
-	note that because the context config file is an XML document, any `&`
-	characters in the URL will have to be escaped to `&amp;`.
+	* `driverClassName`: generally just `org.postgresql.Driver` for
+		PostgreSQL. this driver class must be available to Tomcat, ie.
+		its JAR must be somewhere in the `lib` directory.
+
+	* `url`: the JDBC connection URL, without username and password, but
+		including any other options you would like to set, especially
+		`ssl=true`. see the PostgreSQL (or other database= documentation
+		for the full syntax, or just use PostgreSQL and adapt the example
+		`jdbc:postgresql://localhost/shibdisco?ssl=true`.
+		note that because the context config file is an XML document, any
+		`&` characters in the URL will have to be escaped to `&amp;`.
+
+	* `username`, `password`: database login credentials
+
+	* `maxActive`, `maxIdle`, ...: these limit the number of connections,
+		if desired. the servlet uses extensive caching, so increasing
+		these values will likely not improve performance much.
+
+	* `closeMethod`: generally just `close` so that connections are
+		actually closed when they are disposed of.
+
+	* `validationQuery`, `testOnBorrow`: to guard against timed-out
+		connections, `testOnBorrow` should be `true` and `validationQuery`
+		a fast, simple query that always succeeds, such as `SELECT 1` for
+		PostgreSQL. this is required because the servlet relies on not
+		getting dead connections from the pool. it will retry once if the
+		connection dies during use, but if it gets another dead connection
+		when it retries, it will just give up.
 
 * `shibboleth.discofeed.url`: an absolute URL pointing to the
 	`DiscoveryFeed` handler in a Shibboleth instance. the list of IdPs
