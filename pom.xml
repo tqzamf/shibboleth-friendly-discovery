@@ -29,6 +29,7 @@
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 			<version>9.4-1200-jdbc41</version>
+			<scope>test</scope>
 		</dependency>
 		<dependency>
 			<groupId>javax.servlet</groupId>
@@ -47,6 +48,7 @@
 				<configuration>
 					<contextFile>${project.basedir}/context.xml</contextFile>
 					<contextReloadable>true</contextReloadable>
+					<useTestClasspath>true</useTestClasspath>
 				</configuration>
 			</plugin>
 			<plugin>
