@@ -1,6 +1,16 @@
 #shibboleth-discovery {
 	margin: none;
 	padding: none;
+	font-family: sans-serif;
+}
+
+#shibboleth-discovery h3 {
+	font-size: 125%;
+	font-weight: normal;
+}
+
+#shibboleth-discovery h3 b {
+	font-weight: bold;
 }
 
 #shibboleth-discovery br {
@@ -34,16 +44,13 @@
 	height: 5.5em;
 	width: 11em;
 	margin-bottom: .25em;
+	border: none;
 }
 
 #shibboleth-discovery a p {
 	text-align: center;
 	margin: 0 auto;
 	white-space: normal;
-}
-
-#shibboleth-discovery br {
-	clear: left;
 }
 
 #shibboleth-discovery a.shibboleth-discovery-others {
