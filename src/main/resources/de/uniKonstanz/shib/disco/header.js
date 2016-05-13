@@ -42,7 +42,7 @@ function shibbolethDiscovery(base, html) {
 		document.addEventListener("DOMContentLoaded", insertDiscovery, false);
 	else if ("undefined" != typeof document.attachEvent)
 		// IE8 legacy
-		document.attachEvent("onreadystatechange", function(){
+		document.attachEvent("onreadystatechange", function() {
 			if (document.readyState === "complete")
 				insertDiscovery();
 		});

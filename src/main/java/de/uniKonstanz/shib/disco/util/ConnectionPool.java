@@ -29,7 +29,7 @@ public class ConnectionPool {
 
 	/**
 	 * Gets the current database connection if there is any, reconnecting if not
-	 * currently conencted.
+	 * currently connected.
 	 * 
 	 * @return a database {@link Connection}
 	 * @throws SQLException
