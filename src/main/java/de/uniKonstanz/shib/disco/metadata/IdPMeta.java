@@ -101,10 +101,25 @@ public class IdPMeta implements Comparable<IdPMeta> {
 		this.logo = logo;
 	}
 
-	/** Compares by display name. */
+	/**
+	 * Compares by display name. Note: This is inconsistent with
+	 * {@link #equals(Object)}/{@link #hashCode()}.
+	 */
+	@Override
 	public int compareTo(final IdPMeta other) {
 		// display name is already kept in lowercase for this comparison
 		return displayName.compareTo(other.displayName);
+	}
+
+	@Override
+	public int hashCode() {
+		return entityID.hashCode();
+	}
+
+	@Override
+	public boolean equals(final Object o) {
+		final IdPMeta m = (IdPMeta) o;
+		return entityID.equals(m.entityID);
 	}
 
 	@Override
