@@ -17,7 +17,7 @@
 	clear: left;
 }
 
-#shibboleth-discovery a {
+#shibboleth-discovery a.shibboleth-discovery-button {
 	display: block;
 	float: left;
 	width: 11em;
@@ -34,12 +34,12 @@
 	border-radius: .4em;
 }
 
-#shibboleth-discovery a:hover {
+#shibboleth-discovery a.shibboleth-discovery-button:hover {
 	border: 1px solid #ccc;
 	background-color: #eee;
 }
 
-#shibboleth-discovery a img {
+#shibboleth-discovery a.shibboleth-discovery-button img {
 	display: block;
 	height: 5.5em;
 	width: 11em;
@@ -47,7 +47,7 @@
 	border: none;
 }
 
-#shibboleth-discovery a p {
+#shibboleth-discovery a.shibboleth-discovery-button p {
 	text-align: center;
 	margin: 0 auto;
 	white-space: normal;

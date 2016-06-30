@@ -57,7 +57,6 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private int numTopIdPs;
 	private String jsHeader;
 	private String otherIdPsText;
-	private String bookmarkNotice;
 	private String wayf;
 
 	@Override
@@ -73,7 +72,6 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		fullHeader = getResourceAsString("full-header.html");
 		footer = getResourceAsString("footer.html");
 		wayf = normalize(getResourceAsString("wayf.html"));
-		bookmarkNotice = normalize(getResourceAsString("bookmark-notice.html"));
 
 		// start MetadataUpdateThread and make it available to LoginServlet
 		meta = new MetadataUpdateThread(discoFeed, getLogoCacheDir());
@@ -323,8 +321,15 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildNotices(final StringBuilder buffer,
 			final LoginParams params) {
 		buffer.append(wayf);
+		// bookmark notice. always present, but change text to indicate whether
+		// success can be expected.
+		buffer.append("<p><a href=\"").append(webRoot)
+				.append("/bookmarks.html").append("\" target=\"_blank\">");
 		if (params.canBookmark())
-			buffer.append(bookmarkNotice);
+			buffer.append("How to bookmark these links");
+		else
+			buffer.append("Do not bookmark these links!");
+		buffer.append("</a></p>");
 	}
 
 	/** Adds the HTML for a single IdP button. */
@@ -334,7 +339,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		buffer.append("<a href=\"").append(webRoot).append("/login?");
 		params.appendToURL(buffer);
 		buffer.append("&amp;entityID=").append(idp.getEncodedEntityID())
-				.append("\">");
+				.append("\" class=\"shibboleth-discovery-button\">");
 		// logo; filename never contains anything unsafe
 		buffer.append("<img src=\"").append(webRoot).append("/logo/")
 				.append(idp.getLogoFilename()).append("\" />");
@@ -350,7 +355,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		buffer.append("<br /><a href=\"").append(webRoot)
 				.append("/discovery/full?");
 		params.appendToURL(buffer);
-		buffer.append("\" class=\"shibboleth-discovery-others\">");
+		buffer.append("\" class=\"shibboleth-discovery-button"
+				+ " shibboleth-discovery-others\">");
 		// logo; filename never contains anything unsafe
 		buffer.append("<img src=\"").append(webRoot)
 				.append("/shibboleth.png\" />");
