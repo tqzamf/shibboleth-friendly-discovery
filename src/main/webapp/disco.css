@@ -1,7 +1,11 @@
 #shibboleth-discovery {
 	margin: none;
 	padding: none;
+}
+
+#shibboleth-discovery * {
 	font-family: sans-serif;
+	font-weight: normal;
 }
 
 #shibboleth-discovery h3 {
@@ -27,7 +31,6 @@
 	border: 1px solid #eee;
 	background-color: #fff;
 	color: black;
-	font-family: sans-serif;
 	text-decoration: none;
 	overflow: hidden;
 	box-sizing: content-box;
@@ -53,11 +56,11 @@
 	white-space: normal;
 }
 
-#shibboleth-discovery a.shibboleth-discovery-others {
+#shibboleth-discovery a#shibboleth-discovery-others {
 	width: 14.4em;
 }
 
-#shibboleth-discovery a.shibboleth-discovery-others img {
+#shibboleth-discovery a#shibboleth-discovery-others img {
 	width: 14.4em;
 	height: 5.4em;
 }

@@ -355,8 +355,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		buffer.append("<br /><a href=\"").append(webRoot)
 				.append("/discovery/full?");
 		params.appendToURL(buffer);
-		buffer.append("\" class=\"shibboleth-discovery-button"
-				+ " shibboleth-discovery-others\">");
+		buffer.append("\" class=\"shibboleth-discovery-button\""
+				+ " id=\"shibboleth-discovery-others\">");
 		// logo; filename never contains anything unsafe
 		buffer.append("<img src=\"").append(webRoot)
 				.append("/shibboleth.png\" />");
