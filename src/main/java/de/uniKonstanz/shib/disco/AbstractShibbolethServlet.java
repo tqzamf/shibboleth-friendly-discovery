@@ -47,7 +47,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 * language requires changing the resources, and thus requires recompiling
 	 * the wabapp anyway.
 	 */
-	public static final String LANGUAGE = "en";
+	public static final String DEFAULT_LANGUAGE = "en";
 
 	/** root URL of servlet, as visible externally. */
 	protected String webRoot;

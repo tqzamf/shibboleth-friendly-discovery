@@ -1,6 +1,7 @@
 package de.uniKonstanz.shib.disco.loginlogger;
 
 import de.uniKonstanz.shib.disco.metadata.IdPMeta;
+import de.uniKonstanz.shib.disco.metadata.XPMeta;
 
 /**
  * Represents a combination of IdP and nethash for logging of logins, and keeps
@@ -18,7 +19,7 @@ public final class LoginTuple {
 	 *            the IdP that was chosen, represented by its {@link IdPMeta}
 	 *            object
 	 */
-	public LoginTuple(final int ipHash, final IdPMeta idp) {
+	public LoginTuple(final int ipHash, final XPMeta idp) {
 		this.ipHash = ipHash;
 		// note that this is the same String object for every login. this
 		// avoids holding many copies of identical strings just because they

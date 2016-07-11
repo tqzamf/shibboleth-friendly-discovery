@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URLConnection;
 import java.nio.charset.Charset;
+import java.util.Date;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -13,6 +14,7 @@ import org.apache.http.HttpStatus;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.utils.DateUtils;
 import org.apache.http.impl.NoConnectionReuseStrategy;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.DefaultHttpRequestRetryHandler;
@@ -101,16 +103,31 @@ public class HTTP {
 	 *            the URL to read
 	 * @param maxSize
 	 *            maximum number of bytes to read
-	 * @return all bytes from the URL
+	 * @param lastModified
+	 *            value to send in <code>If-Modified-Since</code> header to
+	 *            avoid repeatedly re-fetching files that haven't changed, or
+	 *            <code>null</code> to omit that header and unconditionally
+	 *            download the file
+	 * @return all bytes from the URL, or <code>null</code> if not modified
 	 * @throws IOException
-	 *             if the URL returned more than {@code maxSize} bytes, and on
-	 *             IO errors
+	 *             if the URL returned more than {@code maxSize} bytes, isn't
+	 *             valid in the first place, and on IO errors
 	 */
-	public static byte[] getBytes(final String url, final int maxSize)
-			throws IOException {
-		final HttpGet req = new HttpGet(url);
+	public static byte[] getBytes(final String url, final int maxSize,
+			final Date lastModified) throws IOException {
+		final HttpGet req;
+		try {
+			req = new HttpGet(url);
+			if (lastModified != null)
+				req.setHeader("If-Modified-Since",
+						DateUtils.formatDate(lastModified));
+		} catch (final IllegalArgumentException e) {
+			throw new IOException("URL not valid", e);
+		}
 		try {
 			final HttpEntity entity = performRequest(req);
+			if (entity == null)
+				return null; // not modified
 			return readBytes(entity, maxSize);
 		} finally {
 			// make sure we don't leak connections
@@ -123,6 +140,8 @@ public class HTTP {
 			throws IOException {
 		// perform HTTP request
 		final HttpResponse resp = client.execute(req);
+		if (resp.getStatusLine().getStatusCode() == HttpStatus.SC_NOT_MODIFIED)
+			return null;
 		if (resp.getStatusLine().getStatusCode() != HttpStatus.SC_OK)
 			throw new IOException("unexpected response: "
 					+ resp.getStatusLine());
@@ -159,11 +178,8 @@ public class HTTP {
 		// maximum size
 		final int length;
 		final byte[] buffer = new byte[contentLength];
-		final InputStream in = entity.getContent();
-		try {
+		try (final InputStream in = entity.getContent()) {
 			length = readBytes(in, buffer);
-		} finally {
-			in.close();
 		}
 
 		// if a Content-Length was specified, it should exactly match the

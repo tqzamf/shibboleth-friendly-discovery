@@ -6,8 +6,8 @@
 		url="jdbc:postgresql://localhost/shibdisco?ssl=true" maxActive="10" maxIdle="4"
 	 	description="JDBC database connection config as a DataSource resource" />
 
-	<Parameter name="shibboleth.discofeed.url" value="http://localhost/Shibboleth.sso/DiscoFeed"
-		description="absolute URL to /Shibboleth.sso/DiscoFeed, either localhost or using SSL" />
+	<Parameter name="shibboleth.metadata.url" value="file:///home/matthias/workspace/shib.disco/DFN-AAI-metadata.xml"
+		description="absolute URL to Shibboleth metadata file; either file:///, localhost, or using SSL" />
 	<Parameter name="shibboleth.storageservice.prefixes" value="ss:mem:"
 		description="space-separated list of StorageService(s) prefixes used in target= parameters; almost always 'ss:mem:'" />
 	<Parameter name="shibboleth.default.target" value=""

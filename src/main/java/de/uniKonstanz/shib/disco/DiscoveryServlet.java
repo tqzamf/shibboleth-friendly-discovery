@@ -49,7 +49,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 			.getLogger(DiscoveryServlet.class.getCanonicalName());
 	private ConnectionPool db;
 	private MetadataUpdateThread meta;
-	private String discoFeed;
+	private String metadataURL;
 	private String friendlyHeader;
 	private String fullHeader;
 	private String footer;
@@ -62,7 +62,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	@Override
 	public void init() throws ServletException {
 		super.init();
-		discoFeed = getContextParameter("shibboleth.discofeed.url");
+		metadataURL = getContextParameter("shibboleth.metadata.url");
 		numTopIdPs = Integer
 				.parseInt(getContextParameter("discovery.friendly.idps"));
 		otherIdPsText = getContextParameter("discovery.friendly.others");
@@ -74,7 +74,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		wayf = normalize(getResourceAsString("wayf.html"));
 
 		// start MetadataUpdateThread and make it available to LoginServlet
-		meta = new MetadataUpdateThread(discoFeed, getLogoCacheDir());
+		meta = new MetadataUpdateThread(metadataURL, getLogoCacheDir());
 		meta.start();
 		getServletContext().setAttribute(
 				MetadataUpdateThread.class.getCanonicalName(), meta);
@@ -137,7 +137,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildFullDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = meta.getAllMetadata();
+		final List<IdPMeta> idps = meta.getAllMetadata(DEFAULT_LANGUAGE);
 		if (idps.isEmpty()) {
 			// if there are no valid IdPs, the user cannot log in. there is no
 			// point in showing an empty discovery page; just report an error
@@ -344,7 +344,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		buffer.append("<img src=\"").append(webRoot).append("/logo/")
 				.append(idp.getLogoFilename()).append("\" />");
 		// display name (escaped)
-		buffer.append("<p>").append(idp.getEscapedDisplayName())
+		buffer.append("<p>")
+				.append(idp.getEscapedDisplayName(DEFAULT_LANGUAGE))
 				.append("</p></a>");
 	}
 

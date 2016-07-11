@@ -19,6 +19,7 @@ import com.google.common.cache.RemovalNotification;
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.metadata.IdPMeta;
 import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
+import de.uniKonstanz.shib.disco.metadata.XPMeta;
 import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
@@ -127,7 +128,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		// anyway, to avoid becoming an unnecessary point of failure.
 		final int ipHash = getClientNetworkHash(req);
 		if (ipHash >= 0) {
-			final IdPMeta idp = getEntityID(entityID);
+			final XPMeta idp = getEntityID(entityID);
 			if (idp != null) {
 				final LoginTuple key = new LoginTuple(ipHash, idp);
 				counter.getUnchecked(key).incrementCounter();
@@ -181,7 +182,7 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	 * @return the metadata object, or <code>null</code> if not present in the
 	 *         metadata
 	 */
-	private IdPMeta getEntityID(final String entityID) {
+	private XPMeta getEntityID(final String entityID) {
 		// get MetadataUpdateThread from DiscoveryServlet. unlocked, but the
 		// value never changes anyway, and two threads writing the same value
 		// should be safe.

@@ -1,24 +1,19 @@
 package de.uniKonstanz.shib.disco.metadata;
 
 import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
-import org.codehaus.jackson.type.TypeReference;
+import org.w3c.dom.Document;
 
-import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
-import de.uniKonstanz.shib.disco.logo.LogoConverter;
 import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
-import de.uniKonstanz.shib.disco.util.HTTP;
 
 /**
  * Background thread that periodically downloads the DiscoFeed and updates IdP
@@ -33,28 +28,35 @@ public class MetadataUpdateThread extends Thread {
 	public static final int INTERVAL = 15 * 60;
 	private static final Logger LOGGER = Logger
 			.getLogger(MetadataUpdateThread.class.getCanonicalName());
-	private final String feedURL;
-	private final LogoConverter converter;
-	private Map<String, IdPMeta> metadata;
-	private List<IdPMeta> allMetadata;
+	private static final DocumentBuilder DOC_BUILDER;
+	static {
+		final DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+		dbf.setNamespaceAware(true);
+		try {
+			DOC_BUILDER = dbf.newDocumentBuilder();
+		} catch (final ParserConfigurationException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	private final String metadataURL;
+	private final IdPMetaParser idpParser;
+	private final SPMetaParser spParser;
 
 	/**
-	 * @param discoFeed
+	 * @param metadataURL
 	 *            URL of Shibboleth DiscoFeed
 	 * @param logoDir
 	 *            logo cache directory
 	 * @throws ServletException
 	 *             if the logo cache directory cannot be created
 	 */
-	public MetadataUpdateThread(final String discoFeed, final File logoDir)
+	public MetadataUpdateThread(final String metadataURL, final File logoDir)
 			throws ServletException {
 		super("metadata updater");
-		feedURL = discoFeed;
-		converter = new LogoConverter(logoDir);
-		logoDir.mkdirs();
-		if (!logoDir.isDirectory())
-			throw new ServletException("cannot create "
-					+ logoDir.getAbsolutePath());
+		idpParser = new IdPMetaParser(logoDir);
+		spParser = new SPMetaParser();
+		this.metadataURL = metadataURL;
 	}
 
 	@Override
@@ -87,93 +89,67 @@ public class MetadataUpdateThread extends Thread {
 	 * @return <code>false</code> if metadata download fails
 	 */
 	private boolean updateMetadata() {
-		final List<IdP> idps;
 		try {
-			idps = HTTP.getJSON(feedURL, new TypeReference<List<IdP>>() {
-			});
-		} catch (final IOException e) {
-			LOGGER.log(Level.SEVERE,
-					"failed to fetch metadata; keeping existing data", e);
+			final Document doc = DOC_BUILDER.parse(metadataURL);
+			idpParser.update(doc);
+			spParser.update(doc);
+			return true;
+		} catch (final Exception e) {
+			LOGGER.log(Level.WARNING,
+					"cannot update metadata; keeping existing data", e);
 			return false;
 		}
 
-		// convert from IdP to IdPMeta and start asynchronous logo download
-		final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>(
-				idps.size());
-		for (final IdP idp : idps) {
-			// reuse existing metadata object if possible
-			final String entityID = idp.getEntityID();
-			final IdPMeta meta;
-			if (map != null && map.containsKey(entityID))
-				meta = map.get(entityID);
-			else
-				meta = new IdPMeta(entityID);
-
-			final String displayName = idp
-					.getDisplayName(AbstractShibbolethServlet.LANGUAGE);
-			meta.setDisplayName(displayName);
-			final String logoURL = idp.getBiggestLogo();
-			new LogoUpdaterThread(converter, meta, logoURL).start();
-			map.put(entityID, meta);
-		}
-
-		metadata = map;
-		// pre-sort the list of all known IdPs. avoids sorting it for every
-		// request.
-		final List<IdPMeta> list = new ArrayList<IdPMeta>(map.size());
-		addMetadata(list, metadata.keySet());
-		Collections.sort(list);
-		allMetadata = list;
-		return true;
+		// final List<IdP> idps;
+		// try {
+		// idps = HTTP.getJSON(metadataURL, new TypeReference<List<IdP>>() {
+		// });
+		// } catch (final IOException e) {
+		// LOGGER.log(Level.SEVERE,
+		// "failed to fetch metadata; keeping existing data", e);
+		// return false;
+		// }
+		//
+		// // convert from IdP to IdPMeta and start asynchronous logo download
+		// final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>(
+		// idps.size());
+		// for (final IdP idp : idps) {
+		// // reuse existing metadata object if possible
+		// final String entityID = idp.getEntityID();
+		// final IdPMeta meta;
+		// if (map != null && map.containsKey(entityID))
+		// meta = map.get(entityID);
+		// else
+		// meta = new IdPMeta(entityID);
+		//
+		// final String displayName = idp
+		// .getDisplayName(AbstractShibbolethServlet.LANGUAGE);
+		// // meta.setDisplayName(null, displayName);
+		// final String logoURL = idp.getBiggestLogo();
+		// new LogoUpdaterThread(converter, meta, logoURL).start();
+		// map.put(entityID, meta);
+		// }
+		//
+		// metadata = map;
+		// // pre-sort the list of all known IdPs. avoids sorting it for every
+		// // request.
+		// final List<IdPMeta> list = new ArrayList<IdPMeta>(map.size());
+		// addMetadata(list, metadata.keySet());
+		// Collections.sort(list);
+		// allMetadata = list;
+		// return true;
 	}
 
-	/**
-	 * Gets metadata for a particular IdP, given its entityID. Returns
-	 * <code>null</code> if this IdP is unknown.
-	 * 
-	 * @param entityID
-	 *            identifies the IdP
-	 * @return corresponding {@link IdPMeta} object, or <code>null</code>
-	 */
 	public IdPMeta getMetadata(final String entityID) {
-		final Map<String, IdPMeta> map = metadata;
-		if (map == null)
-			return null;
-		return map.get(entityID);
+		return idpParser.getMetadata(entityID);
 	}
 
-	/**
-	 * Obtains metadata for a list of IdP, identified by their entityIDs.
-	 * 
-	 * @param list
-	 *            return value; entries are appended to this list
-	 * @param entities
-	 *            list of entityIDs for IdPs
-	 */
 	public void addMetadata(final Collection<IdPMeta> list,
 			final Collection<String> entities) {
-		final Map<String, IdPMeta> map = metadata;
-		if (map == null)
-			return;
-
-		for (final String entityID : entities) {
-			final IdPMeta meta = map.get(entityID);
-			if (meta != null)
-				list.add(meta);
-			else
-				LOGGER.warning("cannot find metadata for " + entityID);
-		}
+		idpParser.addMetadata(list, entities);
 	}
 
-	/**
-	 * Obtains a sorted list of all known IdPs. Never returns <code>null</code>,
-	 * but may return an empty list.
-	 * 
-	 * @return sorted list of {@link IdPMeta}s
-	 */
-	public List<IdPMeta> getAllMetadata() {
-		if (allMetadata == null)
-			return Collections.emptyList();
-		return allMetadata;
+	public List<IdPMeta> getAllMetadata(final String lang) {
+		return idpParser.getAllMetadata(lang);
 	}
 }

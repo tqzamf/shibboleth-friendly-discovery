@@ -1,83 +1,98 @@
 package de.uniKonstanz.shib.disco.metadata;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URLEncoder;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.commons.codec.digest.DigestUtils;
 
 import com.google.common.escape.Escaper;
 import com.google.common.html.HtmlEscapers;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
+import de.uniKonstanz.shib.disco.logo.FallbackLogoThread;
 import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
-import de.uniKonstanz.shib.disco.logo.LogosServlet;
 
 /**
  * Data class to represent an IdP in memory. Holds entityID, display name and
  * logo; compares case-insensitively according to display name.
  */
-public class IdPMeta implements Comparable<IdPMeta> {
+public class IdPMeta extends XPMeta<IdPMeta> implements Comparable<IdPMeta> {
 	private static final Escaper HTML_ESCAPER = HtmlEscapers.htmlEscaper();
-	private final String entityID;
-	private String displayName;
+	private static final String DEFAULT_DISPLAY_NAME_KEY = null;
+
+	private final Map<String, String> lcDisplayNames = new HashMap<String, String>();
+	private final Map<String, String> escDisplayNames = new HashMap<String, String>();
+	private final String fallbackLogo;
 	private String logo;
-	private final String encEntityID;
-	private String escDisplayName;
 
 	public IdPMeta(final String entityID) {
-		this.entityID = entityID;
-		try {
-			encEntityID = URLEncoder.encode(entityID,
-					AbstractShibbolethServlet.ENCODING);
-		} catch (final UnsupportedEncodingException e) {
-			throw new RuntimeException("no support for "
-					+ AbstractShibbolethServlet.ENCODING, e);
-		}
+		super(entityID);
 
 		// dummy initial values
-		logo = LogosServlet.GENERIC_LOGO;
-		displayName = entityID;
+		setDisplayName(DEFAULT_DISPLAY_NAME_KEY, entityID);
+		fallbackLogo = "i" + getEntityHash() + ".png";
 	}
 
 	/**
 	 * Gets the display name, safely escaped for literal inclusion in HTML
-	 * documents. Both single and double quotes are escaped.
+	 * documents. Both single and double quotes are escaped. Picks the
+	 * {@link AbstractShibbolethServlet#DEFAULT_LANGUAGE} if the preferred language
+	 * isn't available.
+	 * 
+	 * @param lang
+	 *            preferred language
 	 * 
 	 * @return the escaped display name
 	 */
-	public String getEscapedDisplayName() {
-		return escDisplayName;
+	public String getEscapedDisplayName(final String lang) {
+		final String escDisplayName = escDisplayNames.get(lang);
+		if (escDisplayName != null)
+			return escDisplayName;
+		return escDisplayNames.get(DEFAULT_DISPLAY_NAME_KEY);
+	}
+
+	/**
+	 * Gets the display name in lowercase (for comparison). Unsafe for inclusion
+	 * in HTML. Picks the {@link AbstractShibbolethServlet#DEFAULT_LANGUAGE} if the
+	 * preferred language isn't available.
+	 * 
+	 * @param lang
+	 *            preferred language
+	 * 
+	 * @return the escaped display name
+	 */
+	public String getLowercaseDisplayName(final String lang) {
+		final String lcDisplayName = lcDisplayNames.get(lang);
+		if (lcDisplayName != null)
+			return lcDisplayName;
+		return lcDisplayNames.get(DEFAULT_DISPLAY_NAME_KEY);
 	}
 
 	/**
 	 * Changes the display name.
 	 * 
+	 * @param lang
+	 *            language tag for the name
 	 * @param displayName
 	 *            the new, raw display name
 	 */
-	public void setDisplayName(final String displayName) {
+	public void setDisplayName(final String lang, final String displayName) {
 		final String normalizedDisplayName = displayName
 				.replaceAll("\\s+", " ").trim();
-		// note: unsynchronized, thus possibly inconsistent. causes no damage.
-		this.displayName = normalizedDisplayName.toLowerCase();
-		escDisplayName = HTML_ESCAPER.escape(normalizedDisplayName);
+
+		lcDisplayNames.put(lang, normalizedDisplayName.toLowerCase());
+		escDisplayNames.put(lang, HTML_ESCAPER.escape(normalizedDisplayName));
 	}
 
 	/**
-	 * Gets the plain entityID. This is unsafe to include in query parameters.
+	 * Changes the display name in the
+	 * {@link AbstractShibbolethServlet#DEFAULT_LANGUAGE}.
 	 * 
-	 * @return the entityID
+	 * @param displayName
+	 *            the new, raw display name in the default language
 	 */
-	public String getEntityID() {
-		return entityID;
-	}
-
-	/**
-	 * Gets the URL-encoded entityID. It is safely escaped for inclusion in
-	 * query parameters.
-	 * 
-	 * @return the entityID
-	 */
-	public String getEncodedEntityID() {
-		return encEntityID;
+	public void setDefaultDisplayName(final String displayName) {
+		setDisplayName(DEFAULT_DISPLAY_NAME_KEY, displayName);
 	}
 
 	/**
@@ -88,7 +103,9 @@ public class IdPMeta implements Comparable<IdPMeta> {
 	 * @return filename of the logo
 	 */
 	public String getLogoFilename() {
-		return logo;
+		if (logo != null)
+			return logo;
+		return fallbackLogo;
 	}
 
 	/**
@@ -101,30 +118,29 @@ public class IdPMeta implements Comparable<IdPMeta> {
 		this.logo = logo;
 	}
 
-	/** Compares by display name, then entityID. */
-	@Override
-	public int compareTo(final IdPMeta other) {
-		// display name is already kept in lowercase for this comparison
-		final int deltaName = displayName.compareTo(other.displayName);
-		if (deltaName != 0)
-			return deltaName;
-		// make sure two different IdPs are never considered equal.
-		return entityID.compareTo(other.entityID);
+	/**
+	 * Gets the filename of the fallback logo. Intended for
+	 * {@link FallbackLogoThread}; for everything else,
+	 * {@link #getLogoFilename()} automatically decides which logo to return.
+	 * 
+	 * @return filename of the fallback logo
+	 */
+	public String getFallbackLogo() {
+		return fallbackLogo;
 	}
 
-	@Override
-	public int hashCode() {
-		return entityID.hashCode();
-	}
-
-	@Override
-	public boolean equals(final Object o) {
-		final IdPMeta m = (IdPMeta) o;
-		return entityID.equals(m.entityID);
+	/**
+	 * Gets the hashed entity ID, used for generating the fallback logo.
+	 * 
+	 * @return SHA1 of the entityID
+	 */
+	public String getEntityHash() {
+		return DigestUtils.shaHex(entityID);
 	}
 
 	@Override
 	public String toString() {
-		return entityID + ": " + displayName + "; " + logo;
+		return super.toString() + ": "
+				+ lcDisplayNames.get(DEFAULT_DISPLAY_NAME_KEY) + "; " + logo;
 	}
 }
