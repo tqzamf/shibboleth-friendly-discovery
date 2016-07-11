@@ -34,7 +34,7 @@ public class LogoUpdaterThread extends AbstractLogoConverter {
 	 * Maximum acceptable filesize for an IdP logo. Anything larger is assumed
 	 * to be an error, either on the server, or by the operator.
 	 */
-	private static final int MAX_LOGO_SIZE = 500000;
+	private static final int MAX_LOGO_SIZE = 250000;
 
 	private final String url;
 	private final IdPMeta meta;
@@ -88,7 +88,8 @@ public class LogoUpdaterThread extends AbstractLogoConverter {
 			// successfully downloaded new logo. convert it and update name
 			// cache.
 			filename = DigestUtils.shaHex(bytes) + ".png";
-			convertLogo(bytes, filename);
+			if (!convertLogo(bytes, filename))
+				return null;
 			writeNameCache(filename, nameCache, beforeDownload);
 			return filename;
 		}

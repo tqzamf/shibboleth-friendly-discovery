@@ -36,7 +36,7 @@ public class IdentIcon {
 			new Color(64, 64, 64), // gray
 			new Color(228, 3, 3), // red
 			new Color(255, 140, 0), // orange
-			new Color(192, 178, 0), // dark-ish yellow
+			new Color(224, 208, 0), // dark-ish yellow
 			new Color(0, 128, 38), // green
 			new Color(0, 77, 255), // blue
 			new Color(117, 7, 135), // violet
@@ -45,6 +45,7 @@ public class IdentIcon {
 	private final int dim;
 	private final Point TL, TC, TR;
 	private final Point CL, CC, CR;
+	@SuppressWarnings("unused")
 	private final Point BL, BC, BR;
 	private final int w;
 	private final int h;
@@ -158,10 +159,9 @@ public class IdentIcon {
 				case 7:
 					poly(g, TL, TR, CR, CL);
 					break;
-				case 11: // diagonal blocks (symmetric wrt 180° rotation)
-				case 15:
-					poly(g, TL, TC, CC, CL);
-					poly(g, BR, BC, CC, CR);
+				case 11:
+				case 15: // main diagonal (symmetric wrt 180° rotation)
+					poly(g, TL, TR, BL);
 					break;
 				}
 				g.setTransform(tfm);

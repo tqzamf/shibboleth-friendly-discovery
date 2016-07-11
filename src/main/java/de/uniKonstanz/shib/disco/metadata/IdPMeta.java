@@ -19,11 +19,13 @@ import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
 public class IdPMeta extends XPMeta<IdPMeta> implements Comparable<IdPMeta> {
 	private static final Escaper HTML_ESCAPER = HtmlEscapers.htmlEscaper();
 	private static final String DEFAULT_DISPLAY_NAME_KEY = null;
+	private static final long LOGO_SHELF_LIFE = 1000 * 60 * 60 * 2;
 
 	private final Map<String, String> lcDisplayNames = new HashMap<String, String>();
 	private final Map<String, String> escDisplayNames = new HashMap<String, String>();
 	private final String fallbackLogo;
 	private String logo;
+	private long lastLogoUpdate;
 
 	public IdPMeta(final String entityID) {
 		super(entityID);
@@ -36,8 +38,8 @@ public class IdPMeta extends XPMeta<IdPMeta> implements Comparable<IdPMeta> {
 	/**
 	 * Gets the display name, safely escaped for literal inclusion in HTML
 	 * documents. Both single and double quotes are escaped. Picks the
-	 * {@link AbstractShibbolethServlet#DEFAULT_LANGUAGE} if the preferred language
-	 * isn't available.
+	 * {@link AbstractShibbolethServlet#DEFAULT_LANGUAGE} if the preferred
+	 * language isn't available.
 	 * 
 	 * @param lang
 	 *            preferred language
@@ -53,8 +55,8 @@ public class IdPMeta extends XPMeta<IdPMeta> implements Comparable<IdPMeta> {
 
 	/**
 	 * Gets the display name in lowercase (for comparison). Unsafe for inclusion
-	 * in HTML. Picks the {@link AbstractShibbolethServlet#DEFAULT_LANGUAGE} if the
-	 * preferred language isn't available.
+	 * in HTML. Picks the {@link AbstractShibbolethServlet#DEFAULT_LANGUAGE} if
+	 * the preferred language isn't available.
 	 * 
 	 * @param lang
 	 *            preferred language
@@ -116,6 +118,18 @@ public class IdPMeta extends XPMeta<IdPMeta> implements Comparable<IdPMeta> {
 	 */
 	public void setLogoFilename(final String logo) {
 		this.logo = logo;
+		lastLogoUpdate = System.currentTimeMillis();
+	}
+
+	/**
+	 * Check whether the logo is stale and should be downloaded again.
+	 * 
+	 * @return <code>true</code> if the logo is older than
+	 *         {@link #LOGO_SHELF_LIFE}
+	 */
+	public boolean isStaleLogo() {
+		final long delta = System.currentTimeMillis() - lastLogoUpdate;
+		return delta > LOGO_SHELF_LIFE;
 	}
 
 	/**

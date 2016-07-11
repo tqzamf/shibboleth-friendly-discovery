@@ -208,7 +208,7 @@ public class IdPMetaParser {
 			}
 		}
 		// keep previous logo if we don't have a new one
-		if (bestURL != null)
+		if (bestURL != null && meta.isStaleLogo())
 			new LogoUpdaterThread(logoDir, meta, bestURL).start();
 	}
 
