@@ -2,6 +2,7 @@ package de.uniKonstanz.shib.disco;
 
 import java.io.IOException;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -47,8 +48,8 @@ import de.uniKonstanz.shib.disco.util.ConnectionPool;
 public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private static final Logger LOGGER = Logger
 			.getLogger(DiscoveryServlet.class.getCanonicalName());
+	private MetadataUpdateThread metaUpdate;
 	private ConnectionPool db;
-	private MetadataUpdateThread meta;
 	private String metadataURL;
 	private String friendlyHeader;
 	private String fullHeader;
@@ -58,6 +59,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private String jsHeader;
 	private String otherIdPsText;
 	private String wayf;
+	private String noIdPsError;
 
 	@Override
 	public void init() throws ServletException {
@@ -72,14 +74,15 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		fullHeader = getResourceAsString("full-header.html");
 		footer = getResourceAsString("footer.html");
 		wayf = normalize(getResourceAsString("wayf.html"));
+		noIdPsError = getResourceAsString("no-idps.html");
 
 		// start MetadataUpdateThread and make it available to LoginServlet
-		meta = new MetadataUpdateThread(metadataURL, getLogoCacheDir());
-		meta.start();
+		metaUpdate = new MetadataUpdateThread(metadataURL, getLogoCacheDir());
+		metaUpdate.start();
 		getServletContext().setAttribute(
-				MetadataUpdateThread.class.getCanonicalName(), meta);
+				MetadataUpdateThread.class.getCanonicalName(), metaUpdate);
 		db = getDatabaseConnectionPool();
-		ranking = new IdPRanking(db, meta, numTopIdPs);
+		ranking = new IdPRanking(db, metaUpdate, numTopIdPs);
 	}
 
 	@Override
@@ -87,7 +90,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		super.destroy();
 		getServletContext().removeAttribute(
 				MetadataUpdateThread.class.getCanonicalName());
-		meta.interrupt();
+		metaUpdate.interrupt();
 	}
 
 	/** Normalize whitespace. Not safe to use on untrusted data. */
@@ -102,14 +105,24 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		resp.setCharacterEncoding(ENCODING);
 		// get target and login attributes, or use defaults. if none given and
 		// no default, that's a fatal error; we cannot recover from that.
-		final LoginParams params = parseLoginParams(req);
-		if (params == null) {
-			LOGGER.warning("request without valid attributes from "
-					+ req.getRemoteAddr() + "; sending error");
-			resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
-					"missing target/login or return attributes");
+		final LoginParams params = parseLoginParams(req, resp);
+		if (params == null)
+			return;
+
+		// special case: if isPassive is set, simply redirect to the cookie
+		// favorite. if there isn't any, we're supposed to return without a
+		// entityID parameter.
+		if (params.isPassive()) {
+			final String idpEntityID = getCookieFavorite(req);
+			final String encodedEntityID;
+			if (idpEntityID != null)
+				encodedEntityID = URLEncoder.encode(idpEntityID, ENCODING);
+			else
+				encodedEntityID = null;
+			sendRedirectToShibboleth(resp, params, encodedEntityID);
 			return;
 		}
+
 		// redirect to full discovery if no discovery flavor specified
 		final String pi = req.getPathInfo();
 		if (pi == null || pi.equals("/")) {
@@ -137,14 +150,19 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildFullDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = meta.getAllMetadata(DEFAULT_LANGUAGE);
+		final List<IdPMeta> idps = metaUpdate.getAllMetadata(DEFAULT_LANGUAGE);
 		if (idps.isEmpty()) {
 			// if there are no valid IdPs, the user cannot log in. there is no
 			// point in showing an empty discovery page; just report an error
-			// instead.
-			LOGGER.severe("no IdPs available for discovery!");
-			resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
-					"no institutions available for login");
+			// instead. make sure the error message doesn't get cached, though.
+			LOGGER.warning("no IdPs available for discovery!");
+			setCacheHeaders(resp, 0);
+			final StringBuilder buffer = new StringBuilder();
+			buffer.append(noIdPsError);
+			buffer.append("Metadata not available, "
+					+ "or metadata contains no identity providers.");
+			buffer.append(footer);
+			sendResponse(resp, buffer, "text/html");
 			return;
 		}
 
@@ -265,9 +283,18 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	 */
 	private void addCookieFavorite(final Collection<IdPMeta> list,
 			final HttpServletRequest req) {
+		final String entityID = getCookieFavorite(req);
+		final IdPMeta idp = metaUpdate.getMetadata(entityID);
+		if (idp != null) {
+			list.add(idp);
+			return;
+		}
+	}
+
+	private String getCookieFavorite(final HttpServletRequest req) {
 		final Cookie[] cookies = req.getCookies();
 		if (cookies == null)
-			return;
+			return null;
 
 		for (final Cookie c : cookies) {
 			if (c.getName() == null || c.getValue() == null)
@@ -276,18 +303,13 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				continue;
 
 			try {
-				final String entityID = URLDecoder.decode(c.getValue(),
-						ENCODING);
-				final IdPMeta idp = meta.getMetadata(entityID);
-				if (idp != null) {
-					list.add(idp);
-					return;
-				}
+				return URLDecoder.decode(c.getValue(), ENCODING);
 			} catch (final Throwable t) {
 				LOGGER.info("malformed cookie: " + c.getValue());
 				// bad cookie; ignored
 			}
 		}
+		return null;
 	}
 
 	/**
@@ -337,8 +359,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 			final LoginParams params) {
 		// link; parameters carefully encoded
 		buffer.append("<a href=\"").append(webRoot).append("/login?");
-		params.appendToURL(buffer);
-		buffer.append("&amp;entityID=").append(idp.getEncodedEntityID())
+		params.appendToURL(buffer, "&amp;");
+		buffer.append("&amp;idpEntityID=").append(idp.getEncodedEntityID())
 				.append("\" class=\"shibboleth-discovery-button\">");
 		// logo; filename never contains anything unsafe
 		buffer.append("<img src=\"").append(webRoot).append("/logo/")
@@ -355,7 +377,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		// link; parameters carefully encoded
 		buffer.append("<br /><a href=\"").append(webRoot)
 				.append("/discovery/full?");
-		params.appendToURL(buffer);
+		params.appendToURL(buffer, "&amp;");
 		buffer.append("\" class=\"shibboleth-discovery-button\""
 				+ " id=\"shibboleth-discovery-others\">");
 		// logo; filename never contains anything unsafe

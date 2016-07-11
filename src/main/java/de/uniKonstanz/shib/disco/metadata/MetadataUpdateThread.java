@@ -152,4 +152,17 @@ public class MetadataUpdateThread extends Thread {
 	public List<IdPMeta> getAllMetadata(final String lang) {
 		return idpParser.getAllMetadata(lang);
 	}
+
+	public boolean isValidResponseLocation(final String entityID) {
+		return spParser.isValidResponseLocation(entityID);
+	}
+
+	public boolean isValidResponseLocation(final String entityID,
+			final String url) {
+		return spParser.isValidResponseLocation(entityID, url);
+	}
+
+	public String getDefaultResponseLocation(final String entityID) {
+		return spParser.getDefaultResponseLocation(entityID);
+	}
 }

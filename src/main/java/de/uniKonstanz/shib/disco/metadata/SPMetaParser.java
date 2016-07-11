@@ -40,10 +40,15 @@ public class SPMetaParser {
 				if (!disco.getAttribute("Binding").equals(DISCO_BINDING))
 					continue;
 
-				// check that location is a valid URL
+				// check that location is a valid URL without any query string
 				final String location = disco.getAttribute("Location");
 				try {
-					new URL(location); // syntax check
+					final URL url = new URL(location);
+					if (url.getQuery() != null) {
+						LOGGER.log(Level.INFO, "ignoring location '" + location
+								+ "' due to query string");
+						continue;
+					}
 				} catch (final MalformedURLException e) {
 					LOGGER.log(Level.INFO, "ignoring invalid location '"
 							+ location + "'", e);

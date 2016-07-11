@@ -19,7 +19,6 @@ import com.google.common.cache.RemovalNotification;
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.metadata.IdPMeta;
 import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
-import de.uniKonstanz.shib.disco.metadata.XPMeta;
 import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
@@ -36,7 +35,7 @@ import de.uniKonstanz.shib.disco.util.ConnectionPool;
  */
 @SuppressWarnings("serial")
 public class LoginServlet extends AbstractShibbolethServlet {
-	private static final Logger LOGGER = Logger.getLogger(LoginServlet.class
+	public static final Logger LOGGER = Logger.getLogger(LoginServlet.class
 			.getCanonicalName());
 	/** Cookie name. Uses the common reserved namespace. */
 	public static final String IDP_COOKIE = "shibboleth-discovery";
@@ -48,7 +47,6 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	private DatabaseWorkerThread updateThread;
 	private DatabaseCleanupThread cleanupThread;
 	private CounterFlushThread flushThread;
-	private MetadataUpdateThread meta;
 
 	@Override
 	public void init() throws ServletException {
@@ -104,20 +102,15 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		resp.setCharacterEncoding(ENCODING);
 		// get target attribute, or use default. if none given and no default,
 		// that's a fatal error; we cannot recover from that.
-		final LoginParams params = parseLoginParams(req);
-		if (params == null) {
-			LOGGER.info("request without valid attributes from "
-					+ req.getRemoteAddr() + "; sending error");
-			resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
-					"missing target/login or return attributes");
+		final LoginParams params = parseLoginParams(req, resp);
+		if (params == null)
 			return;
-		}
 
 		// get entityID for shibboleth login URL. if the entityID is missing for
 		// some reason, redirect to discovery again so the user can pick one.
-		final String entityID = req.getParameter("entityID");
-		if (entityID == null) {
-			LOGGER.info("login request without entityID from "
+		final String idpEntityID = req.getParameter("idpEntityID");
+		if (idpEntityID == null) {
+			LOGGER.info("login request without IdP entityID from "
 					+ req.getRemoteAddr() + "; redirecting to discovery");
 			sendRedirectToFullDiscovery(resp, params);
 			return;
@@ -128,48 +121,25 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		// anyway, to avoid becoming an unnecessary point of failure.
 		final int ipHash = getClientNetworkHash(req);
 		if (ipHash >= 0) {
-			final XPMeta idp = getEntityID(entityID);
+			final IdPMeta idp = getIdP(idpEntityID);
 			if (idp != null) {
 				final LoginTuple key = new LoginTuple(ipHash, idp);
 				counter.getUnchecked(key).incrementCounter();
 			} else
-				LOGGER.info("login request with unknown entityID=" + entityID
-						+ " from " + req.getRemoteAddr());
+				LOGGER.info("login request with unknown IdP entityID "
+						+ idpEntityID + " from " + req.getRemoteAddr());
 		}
 		// set "cookie favorite"
-		final String encodedEntityID = URLEncoder.encode(entityID, ENCODING);
-		final Cookie cookie = new Cookie(IDP_COOKIE, encodedEntityID);
+		final String encodedIdPEntityID = URLEncoder.encode(idpEntityID,
+				ENCODING);
+		final Cookie cookie = new Cookie(IDP_COOKIE, encodedIdPEntityID);
 		cookie.setMaxAge(COOKIE_LIFETIME);
 		resp.addCookie(cookie);
 		// redirect user to shibboleth login URL. disallow caching; we want to
 		// see every login.
 		setCacheHeaders(resp, 0);
 
-		// this allows redirects to arbitrary sites, which can be used for some
-		// obscure attacks which rely on the user recognizing a URL as safe, not
-		// noticing that it redirects to another site, and entering credentials.
-		// for a modern browsers, this may also involve clicking through a
-		// (generally reddish) phishing warning.
-		// the only countermeasure for now is to limit redirects to known-safe
-		// URLs, so we don't redirect to "javascript:your-xss-here", or end up
-		// opening external programs.
-		if (!isSafeURL(params.getLogin())) {
-			LOGGER.info("refusing redirect to unsafe url " + params.getLogin()
-					+ "; sending error");
-			resp.sendError(HttpServletResponse.SC_FORBIDDEN,
-					"refusing to redirect to " + params.getLogin());
-			return;
-		}
-		if (!isSafeURL(params.getTarget())
-				&& !isStorageService(params.getTarget())) {
-			LOGGER.info("refusing login to unsafe url " + params.getTarget()
-					+ "; sending error");
-			resp.sendError(HttpServletResponse.SC_FORBIDDEN,
-					"refusing to redirect to " + params.getTarget());
-			return;
-		}
-		resp.sendRedirect(params.getLogin() + "?SAMLDS=1&entityID="
-				+ encodedEntityID + "&target=" + params.getEncodedTarget());
+		sendRedirectToShibboleth(resp, params, encodedIdPEntityID);
 	}
 
 	/**
@@ -182,13 +152,8 @@ public class LoginServlet extends AbstractShibbolethServlet {
 	 * @return the metadata object, or <code>null</code> if not present in the
 	 *         metadata
 	 */
-	private XPMeta getEntityID(final String entityID) {
-		// get MetadataUpdateThread from DiscoveryServlet. unlocked, but the
-		// value never changes anyway, and two threads writing the same value
-		// should be safe.
-		if (meta == null)
-			meta = (MetadataUpdateThread) getServletContext().getAttribute(
-					MetadataUpdateThread.class.getCanonicalName());
+	private IdPMeta getIdP(final String entityID) {
+		final MetadataUpdateThread meta = getMetadataUpdateThread();
 		if (meta == null) {
 			LOGGER.info("no metadata yet; not logging " + entityID);
 			return null;

@@ -9,7 +9,6 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -28,6 +27,7 @@ import com.google.common.io.ByteStreams;
 import com.google.common.net.InetAddresses;
 
 import de.uniKonstanz.shib.disco.loginlogger.LoginParams;
+import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
 import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
@@ -61,6 +61,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 * non-bookmarkable.
 	 */
 	protected List<String> ssPrefixes;
+	private MetadataUpdateThread meta;
 
 	@Override
 	public void init() throws ServletException {
@@ -241,7 +242,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 			final LoginParams params) throws IOException {
 		final StringBuilder buffer = new StringBuilder();
 		buffer.append(webRoot).append("/discovery/full?");
-		params.appendToURL(buffer);
+		params.appendToURL(buffer, "&");
 		resp.sendRedirect(buffer.toString());
 	}
 
@@ -377,65 +378,148 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 * 
 	 * @param req
 	 *            the client request
+	 * @param resp
+	 *            client response, for sending errors
 	 * @return the {@link LoginParams} describing the combination, or
 	 *         <code>null</code> if no defaults are configured
+	 * @throws IOException
+	 *             if an error occurs but sending it causes an
+	 *             {@link IOException}
 	 */
-	protected LoginParams parseLoginParams(final HttpServletRequest req) {
-		// Shibboleth adds its "return=" parameter to every discovery request.
-		// that's generally a good thing, but prevents the links from being
-		// bookmarkable. we support it as a backup, but prefer the explicit
-		// login+target from the URL if present.
+	protected LoginParams parseLoginParams(final HttpServletRequest req,
+			final HttpServletResponse resp) throws IOException {
+		final String sp = req.getParameter("entityID");
+		if (sp == null) {
+			// SP entityID is mandatory
+			LOGGER.info("request without SP entityID from "
+					+ req.getRemoteAddr() + "; sending error");
+			resp.sendError(HttpServletResponse.SC_BAD_REQUEST,
+					"missing entityID attribute");
+			return null;
+		}
+
+		// follow the standard and use Shibboleth's "return=" parameter when
+		// present, or our own "target=" parameter if not.
 		final String ret = req.getParameter("return");
-		String retLogin = null;
-		String retTarget = null;
-		if (ret != null) {
-			try {
-				final URL url = new URL(ret);
-				retLogin = new URL(url.getProtocol(), url.getHost(),
-						url.getPort(), url.getPath()).toExternalForm();
-				for (final NameValuePair param : URLEncodedUtils.parse(
-						url.getQuery(), ENCODING_CHARSET)) {
-					if (param.getName() == null || param.getValue() == null)
-						continue;
-					if (param.getName().equalsIgnoreCase("target"))
-						retTarget = param.getValue();
-				}
-			} catch (final MalformedURLException e) {
-				LOGGER.log(Level.INFO, "invalid return URL: " + ret, e);
+		final String target;
+		if (ret != null)
+			// try to extract login target URL from Shibboleth's "return="
+			// parameter, so that filtering can be based on it.
+			target = parseTargetURL(ret);
+		else
+			target = req.getParameter("target");
+
+		final String param = req.getParameter("returnIDParam");
+		final String isPassive = req.getParameter("isPassive");
+		final boolean passive = (isPassive != null && isPassive
+				.equalsIgnoreCase("true"));
+		return new LoginParams(ret, target, sp, param, passive);
+	}
+
+	private String parseTargetURL(final String ret) {
+		try {
+			final URL url = new URL(ret);
+			for (final NameValuePair param : URLEncodedUtils.parse(
+					url.getQuery(), ENCODING_CHARSET)) {
+				if (param.getName() == null || param.getValue() == null)
+					continue;
+				if (param.getName().equalsIgnoreCase("target"))
+					return param.getValue();
+			}
+		} catch (final MalformedURLException e) {
+			LOGGER.log(Level.INFO, "invalid return URL: " + ret, e);
+		}
+		return null;
+	}
+
+	protected MetadataUpdateThread getMetadataUpdateThread() {
+		// get MetadataUpdateThread from DiscoveryServlet. unlocked, but the
+		// value never changes anyway, and two threads writing the same value
+		// should be safe.
+		if (meta == null)
+			meta = (MetadataUpdateThread) getServletContext().getAttribute(
+					MetadataUpdateThread.class.getCanonicalName());
+		return meta;
+	}
+
+	protected void sendRedirectToShibboleth(final HttpServletResponse resp,
+			final LoginParams params, final String encodedIdPEntityID)
+			throws IOException {
+		final String spEntityID = params.getSPEntityID();
+		final String login;
+		if (params.getReturn() != null) {
+			// properly validate the return URL. validation is disabled until
+			// metadata is available to avoid unnecessary failures. thus it
+			// forms an open redirect in this special situation, but the lack of
+			// metadata has to be fixed quickly anyway.
+			login = params.getReturn();
+			if (!isValidResponseLocation(spEntityID, login)) {
+				resp.sendError(HttpServletResponse.SC_FORBIDDEN,
+						"refusing to redirect to " + login);
+				return;
+			}
+		} else {
+			// pick the default response location. if we don't have metadata,
+			// we're stuck.
+			login = getDefaultResponseLocation(spEntityID);
+			if (login == null) {
+				resp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+						"cannot find redirect for " + spEntityID);
+				return;
 			}
 		}
 
-		final String target = getParameter(req, "target", retTarget,
-				defaultTarget);
-		final String login = getParameter(req, "login", retLogin, defaultLogin);
-		if (target == null || login == null)
-			return null;
-		return new LoginParams(login, target, !isStorageService(target));
+		// make sure that we don't land the user on something unsafe after login
+		final String target = params.getTarget();
+		if (target != null && !isSafeURL(target) && !isStorageService(target)) {
+			LOGGER.info("refusing login to unsafe url " + target);
+			resp.sendError(HttpServletResponse.SC_FORBIDDEN,
+					"refusing login to " + target);
+			return;
+		}
+
+		// check whether the return URL already has a query string. this is
+		// needed to decide whether to append "?entityID=x" or "&entityID=x",
+		// but has the side effect of rejecting syntactically invalid URLs.
+		final URL url;
+		try {
+			url = new URL(login);
+		} catch (final MalformedURLException e) {
+			LOGGER.info("refusing login at invalid url " + login);
+			resp.sendError(HttpServletResponse.SC_FORBIDDEN,
+					"refusing login to " + login);
+			return;
+		}
+
+		final String nextParam;
+		if (url.getQuery() == null)
+			nextParam = "?";
+		else
+			nextParam = "&";
+		if (encodedIdPEntityID != null)
+			resp.sendRedirect(login + nextParam
+					+ params.getEncodedReturnIDParam() + "="
+					+ encodedIdPEntityID);
+		else
+			resp.sendRedirect(login);
 	}
 
-	/**
-	 * Helper method to get an explicit URL parameter, or one form the
-	 * {@code return} parameters, or the default, or <code>null</code>.
-	 */
-	private static String getParameter(final HttpServletRequest req,
-			final String name, final String fallback, final String deflt)
-			throws NoSuchElementException {
-		// if an explicit parameter is configured in the URL then use it,
-		// overriding the one given by Shibboleth's "return=" parameter if
-		// present.
-		// this order is chosen because it is easy to not pass a parameter in
-		// the discovery URL, but Shibboleth cannot be told to omit the
-		// "return=" parameter.
-		final String param = req.getParameter(name);
-		if (param != null && !param.isEmpty())
-			return param;
-		// use the value from "return=" parameter next, or the default if one is
-		// given.
-		if (fallback != null && !fallback.isEmpty())
-			return fallback;
-		if (deflt != null & !deflt.isEmpty())
-			return deflt;
-		// if there is no default, we have a missing parameter
-		return null;
+	public boolean isValidResponseLocation(final String entityID,
+			final String url) {
+		final MetadataUpdateThread meta = getMetadataUpdateThread();
+		if (meta == null) {
+			LOGGER.info("no metadata yet; accepting " + entityID + " -> " + url);
+			return true;
+		}
+		return meta.isValidResponseLocation(entityID, url);
+	}
+
+	public String getDefaultResponseLocation(final String entityID) {
+		final MetadataUpdateThread meta = getMetadataUpdateThread();
+		if (meta == null) {
+			LOGGER.info("no metadata yet; giving up on " + entityID);
+			return null;
+		}
+		return meta.getDefaultResponseLocation(entityID);
 	}
 }
