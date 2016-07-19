@@ -45,7 +45,6 @@ public class IdentIcon {
 	private final int dim;
 	private final Point TL, TC, TR;
 	private final Point CL, CC, CR;
-	@SuppressWarnings("unused")
 	private final Point BL, BC, BR;
 	private final int w;
 	private final int h;

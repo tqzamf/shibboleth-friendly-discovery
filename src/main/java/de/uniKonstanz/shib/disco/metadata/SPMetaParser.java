@@ -108,7 +108,6 @@ public class SPMetaParser {
 				// update values
 				meta.setReturnLocations(responses);
 				meta.setDefaultReturn(defaultLocation);
-				System.out.println(meta + " " + responses);
 			}
 		}
 		metadata = map;

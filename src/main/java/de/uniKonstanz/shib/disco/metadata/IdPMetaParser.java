@@ -13,6 +13,7 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.imageio.ImageIO;
 import javax.servlet.ServletException;
 import javax.xml.XMLConstants;
 import javax.xml.xpath.XPathExpressionException;
@@ -37,6 +38,7 @@ public class IdPMetaParser {
 	private Map<String, IdPMeta> metadata;
 	private Map<String, List<IdPMeta>> allMetadata;
 	private final File logoDir;
+	private final HashSet<String> suffixes;
 
 	/**
 	 * @param discoFeed
@@ -52,6 +54,9 @@ public class IdPMetaParser {
 		if (!logoDir.isDirectory())
 			throw new ServletException("cannot create "
 					+ logoDir.getAbsolutePath());
+		suffixes = new HashSet<String>();
+		for (final String s : ImageIO.getReaderFileSuffixes())
+			suffixes.add(s);
 	}
 
 	/**
@@ -188,17 +193,31 @@ public class IdPMetaParser {
 		// LogoConverter will create a random "carpet" logo.
 		String bestURL = null;
 		int bestPixels = -1;
+		final boolean bestKnown = false;
 		for (final Element i : LOGO_NODES.eval(node)) {
 			try {
 				final int width = Integer.parseInt(i.getAttribute("width"));
 				final int height = Integer.parseInt(i.getAttribute("height"));
 				final String url = i.getTextContent();
+				// sanity checking
+				if (width <= 0 || height <= 0 || url.isEmpty())
+					continue;
+
 				// replace previous best logo if the current one has more
-				// pixels, but also performs some sanity checking on the new
-				// logo.
+				// pixels, but don't replace a smaller logo in a known-
+				// convertible file format by a logo in an unknown file format.
+				final int pos = url.lastIndexOf('.');
+				final boolean knownFormat;
+				if (pos >= 0) {
+					// might contain all sorts of weirdness if the last path
+					// component doesn't contain a dot, but then it won't appear
+					// in the list of known suffixes anyway.
+					final String suffix = url.substring(pos + 1);
+					knownFormat = suffixes.contains(suffix);
+				} else
+					knownFormat = false;
 				final int nPixels = width * height;
-				if (nPixels > bestPixels && width > 0 && height > 0
-						&& !url.isEmpty()) {
+				if (nPixels > bestPixels && (knownFormat || !bestKnown)) {
 					bestPixels = nPixels;
 					bestURL = url;
 				}
