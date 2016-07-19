@@ -9,7 +9,7 @@ import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
  * Data class to represent an SP or IdP in memory. Equality and sort order
  * defined by entityID alone.
  */
-public class XPMeta<T extends XPMeta<T>> implements Comparable<T> {
+class XPMeta<T extends XPMeta<T>> implements Comparable<T> {
 	protected final String entityID;
 	private final String encEntityID;
 

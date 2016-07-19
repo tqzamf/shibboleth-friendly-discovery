@@ -12,7 +12,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
-public class XPathNodeList {
+class XPathNodeList {
 	private static final XPath xpath = XPathFactory.newInstance().newXPath();
 	static {
 		xpath.setNamespaceContext(MetadataNamespaces.INSTANCE);

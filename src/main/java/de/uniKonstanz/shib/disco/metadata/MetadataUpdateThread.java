@@ -1,19 +1,29 @@
 package de.uniKonstanz.shib.disco.metadata;
 
 import java.io.File;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 
 import org.w3c.dom.Document;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
+
+import de.uniKonstanz.shib.disco.loginlogger.LoginParams;
 import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
+import de.uniKonstanz.shib.disco.util.HTTP;
 
 /**
  * Background thread that periodically downloads the DiscoFeed and updates IdP
@@ -21,6 +31,7 @@ import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
  * in {@link LogoUpdaterThread}.
  */
 public class MetadataUpdateThread extends Thread {
+	private static final String DISCO_FEED = "DiscoFeed";
 	/**
 	 * Metadata update interval, in seconds, used when there was no error
 	 * fetching metadata.
@@ -28,24 +39,15 @@ public class MetadataUpdateThread extends Thread {
 	public static final int INTERVAL = 15 * 60;
 	private static final Logger LOGGER = Logger
 			.getLogger(MetadataUpdateThread.class.getCanonicalName());
-	private static final DocumentBuilder DOC_BUILDER;
-	static {
-		final DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-		dbf.setNamespaceAware(true);
-		try {
-			DOC_BUILDER = dbf.newDocumentBuilder();
-		} catch (final ParserConfigurationException e) {
-			throw new RuntimeException(e);
-		}
-	}
 
 	private final String metadataURL;
 	private final IdPMetaParser idpParser;
 	private final SPMetaParser spParser;
+	private LoadingCache<String, IdPFilter> filters;
 
 	/**
 	 * @param metadataURL
-	 *            URL of Shibboleth DiscoFeed
+	 *            URL of Shibboleth XML metadata
 	 * @param logoDir
 	 *            logo cache directory
 	 * @throws ServletException
@@ -54,24 +56,36 @@ public class MetadataUpdateThread extends Thread {
 	public MetadataUpdateThread(final String metadataURL, final File logoDir)
 			throws ServletException {
 		super("metadata updater");
+		this.metadataURL = metadataURL;
 		idpParser = new IdPMetaParser(logoDir);
 		spParser = new SPMetaParser();
-		this.metadataURL = metadataURL;
+		filters = CacheBuilder.newBuilder()
+				.expireAfterAccess(1, TimeUnit.HOURS)
+				.build(new CacheLoader<String, IdPFilter>() {
+					@Override
+					public IdPFilter load(final String url) throws SQLException {
+						return new IdPFilter(MetadataUpdateThread.this, url);
+					}
+				});
 	}
 
 	@Override
 	public void run() {
+		Date lastDownload = null;
 		while (!interrupted()) {
-			final boolean success = updateMetadata();
+			final long now = System.currentTimeMillis();
+			final boolean success = updateMetadata(lastDownload);
 
 			try {
-				if (success)
+				if (success) {
+					// remember not to download it again...
+					lastDownload = new Date(now);
 					// shibboleth generally updates its metadata every hour, so
 					// it doesn't make sense to update it much more frequently.
 					// rationale for 15 minutes is to not delay metadata updates
 					// by another hour (worst case).
 					Thread.sleep(INTERVAL * 1000);
-				else
+				} else
 					// retry very quickly on failure. this assumes that errors
 					// are caused by shibboleth restarts, but if shibboleth
 					// isn't running or unreachable, the discovery is broken
@@ -86,11 +100,13 @@ public class MetadataUpdateThread extends Thread {
 	/**
 	 * Performs the metadata update.
 	 * 
+	 * @param lastModified
+	 * 
 	 * @return <code>false</code> if metadata download fails
 	 */
-	private boolean updateMetadata() {
+	private boolean updateMetadata(final Date lastModified) {
 		try {
-			final Document doc = DOC_BUILDER.parse(metadataURL);
+			final Document doc = HTTP.getXML(metadataURL, lastModified);
 			idpParser.update(doc);
 			spParser.update(doc);
 			return true;
@@ -99,45 +115,6 @@ public class MetadataUpdateThread extends Thread {
 					"cannot update metadata; keeping existing data", e);
 			return false;
 		}
-
-		// final List<IdP> idps;
-		// try {
-		// idps = HTTP.getJSON(metadataURL, new TypeReference<List<IdP>>() {
-		// });
-		// } catch (final IOException e) {
-		// LOGGER.log(Level.SEVERE,
-		// "failed to fetch metadata; keeping existing data", e);
-		// return false;
-		// }
-		//
-		// // convert from IdP to IdPMeta and start asynchronous logo download
-		// final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>(
-		// idps.size());
-		// for (final IdP idp : idps) {
-		// // reuse existing metadata object if possible
-		// final String entityID = idp.getEntityID();
-		// final IdPMeta meta;
-		// if (map != null && map.containsKey(entityID))
-		// meta = map.get(entityID);
-		// else
-		// meta = new IdPMeta(entityID);
-		//
-		// final String displayName = idp
-		// .getDisplayName(AbstractShibbolethServlet.LANGUAGE);
-		// // meta.setDisplayName(null, displayName);
-		// final String logoURL = idp.getBiggestLogo();
-		// new LogoUpdaterThread(converter, meta, logoURL).start();
-		// map.put(entityID, meta);
-		// }
-		//
-		// metadata = map;
-		// // pre-sort the list of all known IdPs. avoids sorting it for every
-		// // request.
-		// final List<IdPMeta> list = new ArrayList<IdPMeta>(map.size());
-		// addMetadata(list, metadata.keySet());
-		// Collections.sort(list);
-		// allMetadata = list;
-		// return true;
 	}
 
 	public IdPMeta getMetadata(final String entityID) {
@@ -149,8 +126,20 @@ public class MetadataUpdateThread extends Thread {
 		idpParser.addMetadata(list, entities);
 	}
 
-	public List<IdPMeta> getAllMetadata(final String lang) {
-		return idpParser.getAllMetadata(lang);
+	public List<IdPMeta> getAllMetadata(final String lang,
+			final LoginParams params) {
+		final List<IdPMeta> list = idpParser.getAllMetadata(lang);
+		final Collection<IdPMeta> filter = getFilter(params);
+		// no filter, so just return the entire list as-is
+		if (filter == null)
+			return list;
+
+		// only keep IdPs that the SP actually accepts for login
+		final ArrayList<IdPMeta> res = new ArrayList<IdPMeta>(list.size());
+		for (final IdPMeta idp : list)
+			if (filter.contains(idp))
+				res.add(idp);
+		return res;
 	}
 
 	public boolean isValidResponseLocation(final String entityID) {
@@ -164,5 +153,27 @@ public class MetadataUpdateThread extends Thread {
 
 	public String getDefaultResponseLocation(final String entityID) {
 		return spParser.getDefaultResponseLocation(entityID);
+	}
+
+	public Collection<IdPMeta> getFilter(final LoginParams params) {
+		final String ret = params.getReturnLocation();
+		if (ret == null)
+			return null;
+
+		final URL url;
+		try {
+			url = new URL(new URL(ret), DISCO_FEED);
+		} catch (final MalformedURLException e) {
+			LOGGER.log(Level.WARNING, "illegal return URL " + ret, e);
+			return null;
+		}
+
+		final String filter = url.toExternalForm();
+		try {
+			return filters.get(filter).getIdPs();
+		} catch (final ExecutionException e) {
+			LOGGER.log(Level.WARNING, "cannot get filter " + filter, e);
+			return null;
+		}
 	}
 }

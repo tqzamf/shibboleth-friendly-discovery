@@ -25,7 +25,7 @@ import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.logo.FallbackLogoThread;
 import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
 
-public class IdPMetaParser {
+class IdPMetaParser {
 	private static final Logger LOGGER = Logger.getLogger(IdPMetaParser.class
 			.getCanonicalName());
 	private static final XPathNodeList IDP_NODES = new XPathNodeList(

@@ -57,7 +57,6 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private IdPRanking ranking;
 	private int numTopIdPs;
 	private String jsHeader;
-	private String otherIdPsText;
 	private String wayf;
 	private String noIdPsError;
 
@@ -67,7 +66,6 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		metadataURL = getContextParameter("shibboleth.metadata.url");
 		numTopIdPs = Integer
 				.parseInt(getContextParameter("discovery.friendly.idps"));
-		otherIdPsText = getContextParameter("discovery.friendly.others");
 
 		jsHeader = getResourceAsString("header.js");
 		friendlyHeader = getResourceAsString("friendly-header.html");
@@ -82,7 +80,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		getServletContext().setAttribute(
 				MetadataUpdateThread.class.getCanonicalName(), metaUpdate);
 		db = getDatabaseConnectionPool();
-		ranking = new IdPRanking(db, metaUpdate, numTopIdPs);
+		ranking = new IdPRanking(db, metaUpdate);
 	}
 
 	@Override
@@ -150,7 +148,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildFullDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = metaUpdate.getAllMetadata(DEFAULT_LANGUAGE);
+		final List<IdPMeta> idps = metaUpdate.getAllMetadata(DEFAULT_LANGUAGE,
+				params);
 		if (idps.isEmpty()) {
 			// if there are no valid IdPs, the user cannot log in. there is no
 			// point in showing an empty discovery page; just report an error
@@ -185,7 +184,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildFriendlyDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = getIdPList(req);
+		final List<IdPMeta> idps = getIdPList(req, params);
 		if (idps.isEmpty()) {
 			// in the (unlikely) case that none of the entityIDs are known,
 			// fall back to providing the complete list. this is more useful
@@ -228,7 +227,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildEmbeddedDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = getIdPList(req);
+		final List<IdPMeta> idps = getIdPList(req, params);
 
 		final StringBuilder buffer = new StringBuilder();
 		buffer.append(jsHeader);
@@ -255,25 +254,27 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	 * <li>the globally most popular ones
 	 * </ol>
 	 */
-	private List<IdPMeta> getIdPList(final HttpServletRequest req) {
+	private List<IdPMeta> getIdPList(final HttpServletRequest req,
+			final LoginParams params) {
 		// known maximum size: favorite, and perhaps two lists of numTopIdPs
 		// entries
-		final LinkedHashSet<IdPMeta> list = new LinkedHashSet<IdPMeta>(
-				1 + 2 * numTopIdPs);
+		final LinkedHashSet<IdPMeta> list = new LinkedHashSet<IdPMeta>();
 		addCookieFavorite(list, req);
 		addNethashFavorites(list, req);
-		if (list.size() < numTopIdPs)
-			// don't unnecessarily add global favorites if there are already
-			// enough nethash-local favorites.
-			addGlobalFavorites(list);
+		addGlobalFavorites(list);
 
-		// limit to correct number of IdPs, and convert to an actual List
+		// limit to correct number of IdPs, filter by the IdPs actually accepted
+		// by the SP, and convert to an actual List
+		final MetadataUpdateThread meta = getMetadataUpdateThread();
+		final Collection<IdPMeta> filter = meta != null ? meta
+				.getFilter(params) : null;
 		final List<IdPMeta> res = new ArrayList<IdPMeta>(numTopIdPs);
-		for (final IdPMeta idp : list) {
-			res.add(idp);
-			if (res.size() >= numTopIdPs)
-				break;
-		}
+		for (final IdPMeta idp : list)
+			if (filter == null || filter.contains(idp)) {
+				res.add(idp);
+				if (res.size() >= numTopIdPs)
+					break;
+			}
 		return res;
 	}
 
@@ -385,6 +386,6 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				.append("/shibboleth.png\" />");
 		// other IdPs text. unescaped so it can contain HTML; that string
 		// is trusted anyway.
-		buffer.append("<p>").append(otherIdPsText).append("</p></a>");
+		buffer.append("<p>full list of institutions</p></a>");
 	}
 }

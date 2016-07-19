@@ -8,7 +8,7 @@ import java.util.Map;
 import javax.xml.XMLConstants;
 import javax.xml.namespace.NamespaceContext;
 
-public class MetadataNamespaces implements NamespaceContext {
+class MetadataNamespaces implements NamespaceContext {
 	public static final NamespaceContext INSTANCE = new MetadataNamespaces();
 
 	private static final String IDPDISCO_NS = "urn:oasis:names:tc:SAML:profiles:SSO:idp-discovery-protocol";

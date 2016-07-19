@@ -20,9 +20,6 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.http.NameValuePair;
-import org.apache.http.client.utils.URLEncodedUtils;
-
 import com.google.common.io.ByteStreams;
 import com.google.common.net.InetAddresses;
 
@@ -51,10 +48,6 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 
 	/** root URL of servlet, as visible externally. */
 	protected String webRoot;
-	/** default URL to visit after login if none given. */
-	protected String defaultTarget;
-	/** default URL to /Shibboleth.sso/Login, used if none given. */
-	protected String defaultLogin;
 	/**
 	 * list of StorageService prefixes used in {@code target=} parameters. these
 	 * are safe for use in in {@code target=} parameters (obviously), but
@@ -68,8 +61,6 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 		super.init();
 		webRoot = getContextParameter("discovery.web.root").replaceFirst("/+$",
 				"");
-		defaultTarget = getContextDefaultParameter("target");
-		defaultLogin = getContextDefaultParameter("login");
 		ssPrefixes = Arrays.asList(getContextParameter(
 				"shibboleth.storageservice.prefixes").split(" +"));
 	}
@@ -89,26 +80,6 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 		if (value == null)
 			throw new ServletException("missing context parameter: " + name);
 		return value;
-	}
-
-	/**
-	 * Get a parameter from {@link ServletContext}, mapping the empty string to
-	 * <code>null</code>.
-	 * 
-	 * @param suffix
-	 *            name suffix of parameter, appended to
-	 *            {@code "shibboleth.default."}
-	 * @return value of parameter, or <code>null</code> if the value is
-	 *         <code>""</code>
-	 * @throws ServletException
-	 *             if the named parameter doesn't exist
-	 */
-	private String getContextDefaultParameter(final String suffix)
-			throws ServletException {
-		final String dflt = getContextParameter("shibboleth.default." + suffix);
-		if (dflt.isEmpty())
-			return null;
-		return dflt;
 	}
 
 	/**
@@ -388,8 +359,8 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 */
 	protected LoginParams parseLoginParams(final HttpServletRequest req,
 			final HttpServletResponse resp) throws IOException {
-		final String sp = req.getParameter("entityID");
-		if (sp == null) {
+		final String spEntityID = req.getParameter("entityID");
+		if (spEntityID == null) {
 			// SP entityID is mandatory
 			LOGGER.info("request without SP entityID from "
 					+ req.getRemoteAddr() + "; sending error");
@@ -400,36 +371,12 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 
 		// follow the standard and use Shibboleth's "return=" parameter when
 		// present, or our own "target=" parameter if not.
+		final MetadataUpdateThread meta = getMetadataUpdateThread();
 		final String ret = req.getParameter("return");
-		final String target;
-		if (ret != null)
-			// try to extract login target URL from Shibboleth's "return="
-			// parameter, so that filtering can be based on it.
-			target = parseTargetURL(ret);
-		else
-			target = req.getParameter("target");
-
+		final String target = req.getParameter("target");
 		final String param = req.getParameter("returnIDParam");
-		final String isPassive = req.getParameter("isPassive");
-		final boolean passive = (isPassive != null && isPassive
-				.equalsIgnoreCase("true"));
-		return new LoginParams(ret, target, sp, param, passive);
-	}
-
-	private String parseTargetURL(final String ret) {
-		try {
-			final URL url = new URL(ret);
-			for (final NameValuePair param : URLEncodedUtils.parse(
-					url.getQuery(), ENCODING_CHARSET)) {
-				if (param.getName() == null || param.getValue() == null)
-					continue;
-				if (param.getName().equalsIgnoreCase("target"))
-					return param.getValue();
-			}
-		} catch (final MalformedURLException e) {
-			LOGGER.log(Level.INFO, "invalid return URL: " + ret, e);
-		}
-		return null;
+		final String passive = req.getParameter("isPassive");
+		return new LoginParams(meta, spEntityID, ret, target, param, passive);
 	}
 
 	protected MetadataUpdateThread getMetadataUpdateThread() {
@@ -445,28 +392,19 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	protected void sendRedirectToShibboleth(final HttpServletResponse resp,
 			final LoginParams params, final String encodedIdPEntityID)
 			throws IOException {
-		final String spEntityID = params.getSPEntityID();
-		final String login;
-		if (params.getReturn() != null) {
-			// properly validate the return URL. validation is disabled until
-			// metadata is available to avoid unnecessary failures. thus it
-			// forms an open redirect in this special situation, but the lack of
-			// metadata has to be fixed quickly anyway.
-			login = params.getReturn();
-			if (!isValidResponseLocation(spEntityID, login)) {
-				resp.sendError(HttpServletResponse.SC_FORBIDDEN,
-						"refusing to redirect to " + login);
-				return;
-			}
-		} else {
-			// pick the default response location. if we don't have metadata,
-			// we're stuck.
-			login = getDefaultResponseLocation(spEntityID);
-			if (login == null) {
-				resp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
-						"cannot find redirect for " + spEntityID);
-				return;
-			}
+		final String login = params.getReturnLocation();
+		// send 403 when the return URL isn't allowed, but 503 when we just
+		// can't figure it out. the important difference is that for the 503,
+		// retrying might work.
+		if (login == null) {
+			resp.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+					"cannot find redirect for " + params.getSPEntityID());
+			return;
+		}
+		if (!params.isValidReturnLocation()) {
+			resp.sendError(HttpServletResponse.SC_FORBIDDEN,
+					"refusing to redirect to " + login);
+			return;
 		}
 
 		// make sure that we don't land the user on something unsafe after login
@@ -487,39 +425,23 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 		} catch (final MalformedURLException e) {
 			LOGGER.info("refusing login at invalid url " + login);
 			resp.sendError(HttpServletResponse.SC_FORBIDDEN,
-					"refusing login to " + login);
+					"refusing login at " + login);
 			return;
 		}
 
-		final String nextParam;
-		if (url.getQuery() == null)
-			nextParam = "?";
-		else
-			nextParam = "&";
-		if (encodedIdPEntityID != null)
-			resp.sendRedirect(login + nextParam
-					+ params.getEncodedReturnIDParam() + "="
-					+ encodedIdPEntityID);
-		else
-			resp.sendRedirect(login);
-	}
-
-	public boolean isValidResponseLocation(final String entityID,
-			final String url) {
-		final MetadataUpdateThread meta = getMetadataUpdateThread();
-		if (meta == null) {
-			LOGGER.info("no metadata yet; accepting " + entityID + " -> " + url);
-			return true;
+		// append the discovered entityID, if any. the only case when the
+		// entityID may be null is when isPassive was specified as true, but the
+		// user doesn't have a cookie.
+		final StringBuilder buffer = new StringBuilder(login);
+		if (encodedIdPEntityID != null) {
+			if (url.getQuery() == null)
+				buffer.append('?');
+			else
+				buffer.append('&');
+			buffer.append(params.getEncodedReturnIDParam());
+			buffer.append('=');
+			buffer.append(encodedIdPEntityID);
 		}
-		return meta.isValidResponseLocation(entityID, url);
-	}
-
-	public String getDefaultResponseLocation(final String entityID) {
-		final MetadataUpdateThread meta = getMetadataUpdateThread();
-		if (meta == null) {
-			LOGGER.info("no metadata yet; giving up on " + entityID);
-			return null;
-		}
-		return meta.getDefaultResponseLocation(entityID);
+		resp.sendRedirect(buffer.toString());
 	}
 }

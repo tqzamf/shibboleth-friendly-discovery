@@ -13,7 +13,7 @@ import javax.xml.xpath.XPathExpressionException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
-public class SPMetaParser {
+class SPMetaParser {
 	private static final Logger LOGGER = Logger.getLogger(SPMetaParser.class
 			.getCanonicalName());
 

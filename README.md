@@ -16,8 +16,9 @@ this means:
 	* most popular by /16 (IPv4) or /48 (IPv6) IP block
 	* global popularity
 * fallback list of all IdPs is searchable
-* most links are bookmarkable
+* many links are bookmarkable
 * can be embedded in application
+* will only show IdPs that the SP accepts (obviously)
 
 other features:
 
@@ -180,6 +181,17 @@ How to deploy
 	note that the CSS namespace `shibboleth-discovery` is not used to
 	style the fallback button, to avoid interaction with discovery.
 
+8. make sure the `DiscoveryFeed` handler is enabled in all Shibboleth
+	instances that send discovery requests to the servlet. the servlet
+	will download the list of accepted IdPs from `DiscoFeed` (relative
+	to the `Login` URL). if this URL returns an error, the servlet will
+	just show all IdPs -- even those that the SP will not accept, which is
+	bad user experience. the relevant part in `shibboleth2.xml` is:
+
+	```xml
+	<Handler type="DiscoveryFeed" Location="/DiscoFeed"/>
+	```
+
 
 Discovery services
 ------------------
@@ -196,7 +208,7 @@ available:
 	"other IdPs" button that redirects to `discovery/full`.
 	the "most likely" IdPs are, in order:
 
-	1. the last one used, if any, as marked by a cookie
+	1. the one the user picked last time, if any, as marked by a cookie
 	2. the most popular ones for the user's /16 (IPv4) or /48 (IPv6)
 	3. the globally most popular ones
 
@@ -212,29 +224,29 @@ available:
 
 each of the discovery method takes the following parameters:
 
-* `login`: the URL of the `Login` handler of the Shibboleth instance to
-	use for login (which doesn't have to be the same that provides the
-	`DiscoveryFeed` as long as they accept the same IdPs). generally
-	`https://host.name/Shibboleth.sso/Login`. if the discovery is used
-	by only a single SP, this parameter can be omitted and declared in
-	the configuration parameter `shibboleth.default.login` instead.
+* `entityID`: the entityID of the SP. mandatory.
 	
-* `target`: the URL to visit after Shibboleth login handler. this depends
-	on the application; it is generally either a Shibboleth-protected
-	starting page, or a URL to the application's internal login mechanism.
-	for the `omniauth-shibboleth` gem (ruby on rails), it is something
-	like `https://host.name/users/auth/shibboleth/callback` (which then
-	triggers an OAuth login using Shibboleth).
+* `target`: the URL to visit after Shibboleth login handler. it's usually
+	better to instead set the `homeURL` in `<ApplicationDefaults>` in
+	`shibboleth2.xml` to that URL and just omit the parameter.
+
+	the value depends on the application; it is generally either a
+	Shibboleth-protected starting page, or a URL that triggers the
+	application's internal login mechanism.
+
+	for the `omniauth-shibboleth` gem (ruby on rails), it is something like
+	`https://host.name/users/auth/shibboleth/callback` (which then triggers
+	an OAuth login using Shibboleth).
 
 * `return`: passed by Shibboleth when calling the discovery indirectly,
 	ie. when declared in `<SSO discoveryURL="...">` in the Shibboleth
-	config. the URL will be parsed and the `login` and `target` parameters
-	will be extracted. it is not recommended to use this feature; instead,
-	link to the discovery service directly and explicitly pass the `login`
-	and `target` parameters (or omit them, if configured that way).
+	config. it is recommended to embed the discovery into the application
+	instead because it saves a click for the user.
 
-* `entityID`: passed by Shibboleth when calling the discovery indirectly.
-	ignored.
+* most of the other parameters defined in the SAML2 "Identity Provider
+	Discovery Service Protocol and Profile" specification. `returnIDParam`
+	and `isPassive` are fully supported, but `policy` is ignored and always
+	treated as if it was the default.
 
 
 Configuration
@@ -273,17 +285,12 @@ Configuration
 		connection dies during use, but if it gets another dead connection
 		when it retries, it will just give up.
 
-* `shibboleth.discofeed.url`: an absolute URL pointing to the
-	`DiscoveryFeed` handler in a Shibboleth instance. the list of IdPs
-	offered for login will be downloaded from this URL, so it must be
-	secure -- either through a trusted link (loopback interface preferred),
-	or by using SSL. if the discovery is running on the same host as
-	Shibboleth, use `http://localhost/Shibboleth.sso/DiscoFeed`. also
-	make sure the `DiscoveryFeed` as actually enabled in `shibboleth2.xml`:
-
-	```xml
-	<Handler type="DiscoveryFeed" Location="/DiscoFeed"/>
-	```
+* `shibboleth.metadata.url`: an absolute URL pointing to the Shibboleth
+	XML metadata. this file will be downloaded and parsed whenever it
+	changes, or every 15 minutes if the server ignores `If-Modified-Since`.
+	this must be a secure URL, ie. either `https://` or `localhost`.
+	note that this is downloaded with Apache http-client and thus doesn't
+	support the `file:///` scheme.
 
 * `shibboleth.storageservice.prefixes`: if Shibboleth is configured to use
 	a `StorageService` (the default), then it can generate `target=`
@@ -292,14 +299,6 @@ Configuration
 	recommend bookmarking them), their prefixes have to be given in a
 	space-separated list. unless you changed this in the Shibboleth config,
 	the correct value is `ss:mem:`.
-
-* `shibboleth.default.target`: default for the `target` parameter to the
-	discovery services. if left empty, there is no default and the `target`
-	parameter is mandatory.
-
-* `shibboleth.default.login`: default for the `login` parameter to the
-	discovery services. if left empty, there is no default and the `login`
-	parameter is mandatory.
 
 * `discovery.web.root`: external base URL under which the servlet is
 	reachable. this is generally `https://host.name/shibboleth/`, but
@@ -310,6 +309,3 @@ Configuration
 
 * `discovery.friendly.idps`: number of IdPs to show in the "friendly"
 	(short) discovery. `6` is a good value.
-
-* `discovery.friendly.others`: text shown on the "other IdPs" button. can
-	contain arbitrary HTML.

@@ -7,6 +7,10 @@ import java.net.URLConnection;
 import java.nio.charset.Charset;
 import java.util.Date;
 
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -22,6 +26,8 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.LaxRedirectStrategy;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
+import org.w3c.dom.Document;
+import org.xml.sax.SAXException;
 
 /**
  * Wrapper around {@link HttpClient}, with sensible timeouts for every
@@ -34,6 +40,7 @@ public class HTTP {
 	private static final RequestConfig config;
 	private static final CloseableHttpClient client;
 	private static final ObjectMapper oma;
+	private static final DocumentBuilder docBuilder;
 
 	static {
 		config = RequestConfig.custom()
@@ -56,6 +63,13 @@ public class HTTP {
 				.setConnectionReuseStrategy(NoConnectionReuseStrategy.INSTANCE)
 				.setKeepAliveStrategy(new NoKeepAliveStrategy()).build();
 		oma = new ObjectMapper();
+		final DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+		dbf.setNamespaceAware(true);
+		try {
+			docBuilder = dbf.newDocumentBuilder();
+		} catch (final ParserConfigurationException e) {
+			throw new RuntimeException(e);
+		}
 	}
 
 	/**
@@ -96,6 +110,33 @@ public class HTTP {
 	}
 
 	/**
+	 * Reads XML from a URL and parses it into a DOM tree. There is no limit on
+	 * the size of the input.
+	 * 
+	 * @param url
+	 *            the URL to read
+	 * @param lastModified
+	 *            timestamp of last download, or <code>null</code> to download
+	 *            the file unconditionally
+	 * @return an XML {@link Document} containing the parsed DOM tree
+	 * @throws IOException
+	 *             on IO errors
+	 */
+	public static Document getXML(final String url, final Date lastModified)
+			throws IOException {
+		final HttpGet req = getRequest(url, lastModified);
+		try {
+			final HttpEntity entity = performRequest(req);
+			return docBuilder.parse(entity.getContent());
+		} catch (final SAXException e) {
+			throw new IOException("parsing failed", e);
+		} finally {
+			// make sure request can be reused
+			req.reset();
+		}
+	}
+
+	/**
 	 * Reads a URL into a {@code byte[]}, throwing an {@link IOException} if the
 	 * entity is larger than {@code maxSize} bytes.
 	 * 
@@ -115,15 +156,7 @@ public class HTTP {
 	 */
 	public static byte[] getBytes(final String url, final int maxSize,
 			final Date lastModified) throws IOException {
-		final HttpGet req;
-		try {
-			req = new HttpGet(url);
-			if (lastModified != null)
-				req.setHeader("If-Modified-Since",
-						DateUtils.formatDate(lastModified));
-		} catch (final IllegalArgumentException e) {
-			throw new IOException("URL not valid", e);
-		}
+		final HttpGet req = getRequest(url, lastModified);
 		try {
 			final HttpEntity entity = performRequest(req);
 			if (entity == null)
@@ -135,7 +168,25 @@ public class HTTP {
 		}
 	}
 
-	/** Request helper; throw {@link IOException} on non-200 response. */
+	/**
+	 * Builds an {@link HttpGet} request, optionally with an
+	 * {@code If-Modified-Since} header.
+	 */
+	private static HttpGet getRequest(final String url, final Date lastModified)
+			throws IOException {
+		final HttpGet req;
+		try {
+			req = new HttpGet(url);
+			if (lastModified != null)
+				req.setHeader("If-Modified-Since",
+						DateUtils.formatDate(lastModified));
+		} catch (final IllegalArgumentException e) {
+			throw new IOException("URL not valid", e);
+		}
+		return req;
+	}
+
+	/** Request helper; throws {@link IOException} on non-200 response. */
 	private static HttpEntity performRequest(final HttpGet req)
 			throws IOException {
 		// perform HTTP request

@@ -55,10 +55,6 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		updateThread = new DatabaseWorkerThread(db);
 		cleanupThread = new DatabaseCleanupThread(db);
 
-		if (!defaultLogin.startsWith("https://"))
-			LOGGER.warning("shibboleth login URL is relative or non-SSL: "
-					+ defaultLogin);
-
 		// cache abused as a way of aggregating counts for 10 minutes.
 		// cache size is limited so that the memory consumption cannot grow
 		// without limit: each object is ~32 bytes (2 ints, a reference,

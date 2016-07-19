@@ -19,8 +19,8 @@ import com.google.common.cache.LoadingCache;
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.metadata.IdPMeta;
 import de.uniKonstanz.shib.disco.metadata.MetadataUpdateThread;
-import de.uniKonstanz.shib.disco.util.ConnectionPool;
 import de.uniKonstanz.shib.disco.util.AutoRetryStatement;
+import de.uniKonstanz.shib.disco.util.ConnectionPool;
 
 /**
  * Handles loading ranked lists of IdPs from the database. Results are cached
@@ -32,7 +32,6 @@ public class IdPRanking {
 	private final AutoRetryStatement<List<String>, Integer> getIdPList;
 	private final AutoRetryStatement<List<String>, Void> getGlobalIdPList;
 	private final LoadingCache<Integer, IdPMeta[]> cache;
-	private final int numIdPs;
 
 	/**
 	 * @param db
@@ -40,15 +39,11 @@ public class IdPRanking {
 	 * @param meta
 	 *            the {@link MetadataUpdateThread} containing the metadata
 	 *            objects for all IdPs
-	 * @param numIdPs
-	 *            number of IdPs to return for each query
 	 * @throws ServletException
 	 *             if the database statement cannot be prepared
 	 */
-	public IdPRanking(final ConnectionPool db,
-			final MetadataUpdateThread meta, final int numIdPs)
+	public IdPRanking(final ConnectionPool db, final MetadataUpdateThread meta)
 			throws ServletException {
-		this.numIdPs = numIdPs;
 
 		getIdPList = new AutoRetryStatement<List<String>, Integer>(db,
 				"select entityid from loginstats where iphash = ?"
@@ -81,9 +76,10 @@ public class IdPRanking {
 					@Override
 					public IdPMeta[] load(final Integer key)
 							throws SQLException {
+						final List<String> idps = loadIdPList(key);
 						final ArrayList<IdPMeta> list = new ArrayList<IdPMeta>(
-								numIdPs);
-						meta.addMetadata(list, loadIdPList(key));
+								idps.size());
+						meta.addMetadata(list, idps);
 						return list.toArray(new IdPMeta[list.size()]);
 					}
 				});
@@ -94,8 +90,8 @@ public class IdPRanking {
 	 * results as a list.
 	 */
 	private List<String> toList(final ResultSet res) throws SQLException {
-		final ArrayList<String> list = new ArrayList<String>(numIdPs);
-		while (res.next() && list.size() < numIdPs)
+		final ArrayList<String> list = new ArrayList<String>();
+		while (res.next())
 			list.add(res.getString(1));
 		res.close();
 		return list;
