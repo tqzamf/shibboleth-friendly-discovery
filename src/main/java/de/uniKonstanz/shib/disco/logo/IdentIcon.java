@@ -36,11 +36,11 @@ public class IdentIcon {
 			new Color(64, 64, 64), // gray
 			new Color(228, 3, 3), // red
 			new Color(255, 140, 0), // orange
-			new Color(224, 208, 0), // dark-ish yellow
+			new Color(240, 224, 0), // dark-ish yellow
 			new Color(0, 128, 38), // green
 			new Color(0, 77, 255), // blue
 			new Color(117, 7, 135), // violet
-			new Color(0, 160, 160), // cyan
+			new Color(0, 180, 180), // cyan
 	};
 	private final int dim;
 	private final Point TL, TC, TR;
@@ -95,27 +95,30 @@ public class IdentIcon {
 		int pos = 1;
 		final int color = acc & 7;
 		acc >>= 3;
+		num -= 3;
 		for (int x = 0; x < w; x++)
 			for (int y = 0; y < h; y++) {
 				// this re-formats hex characters into 5-bit units
-				while (num < 5) {
+				while (num < 6) {
 					final int digit = Character.digit(ident.charAt(pos++), 16);
 					acc |= digit << num;
 					num += 4;
 				}
-				final int bits = acc & 31;
-				acc >>= 5;
-				num -= 5;
+				final int bits = acc & 63;
+				acc >>= 6;
+				num -= 6;
 
 				// bit 0x10 inverts the color of the current rectangle
 				final AffineTransform tfm = g.getTransform();
 				g.translate(dim * x, dim * y);
-				switch (bits & 16) {
+				// switch (bits & 16) {
+				switch (bits & 32) {
 				case 0:
 					g.setBackground(Color.WHITE);
 					g.setColor(palette[color]);
 					break;
-				case 16:
+				// case 16:
+				case 32:
 					g.setBackground(palette[color]);
 					g.setColor(Color.WHITE);
 					break;
@@ -124,44 +127,75 @@ public class IdentIcon {
 				// generally, bits 0xC0 decide about rotation, however some of
 				// the symbols have rotational symmetries, so different ones
 				// have to be used for 180° rotation.
-				switch (bits & 12) {
-				case 12:
+				switch (bits & 3) {
+				case 3:
 					g.rotate(Math.PI / 2, dim / 2.0, dim / 2.0);
-				case 8:
+				case 2:
 					g.rotate(Math.PI / 2, dim / 2.0, dim / 2.0);
-				case 4:
+				case 1:
 					g.rotate(Math.PI / 2, dim / 2.0, dim / 2.0);
 				case 0:
 					break;
 				}
 				// carefully chosen symbols to generate "nice" icons / carpets.
 				// these are ordered so that symbols & 0x04 == 0 are symmetric.
-				switch (bits & 15) {
+				// switch (bits & 15) {
+				switch (bits & 31) {
 				case 0: // triangle at top pointing up
-				case 4:
-				case 8:
-				case 12:
+				case 1:
+				case 2:
+				case 3:
 					poly(g, CL, TC, CR);
 					break;
-				case 1: // triangle at bottom pointing up
+				case 4: // triangle at bottom pointing up
 				case 5:
-				case 9:
-				case 13:
+				case 6:
+				case 7:
 					poly(g, BL, CC, BR);
 					break;
-				case 2: // rectangle in top-left corner
-				case 6:
+				case 8: // rectangle in top-left corner
+				case 9:
 				case 10:
-				case 14:
+				case 11:
 					poly(g, TL, TC, CC, CL);
 					break;
-				case 3: // top half filled (symmetric wrt 180° rotation)
-				case 7:
+				case 12: // sort of an arrow pointing into the top-left corner
+				case 13:
+				case 14:
+				case 15:
+					poly(g, TL, TC, CR, CC, BC, CL);
+					break;
+				case 16: // most easily described as a rhombus with the triangle
+				case 17: // in the top-right corner filled in
+				case 18:
+				case 19:
+					poly(g, TL, TC, CR, BC, CL);
+					break;
+				case 20: // corner-pointing triangles in adjacent corners
+				case 21:
+				case 22:
+				case 23:
+					poly(g, TL, TC, CL);
+					poly(g, TC, TR, CR);
+					break;
+				case 24: // top half filled (symmetric wrt 180° rotation)
+				case 25:
 					poly(g, TL, TR, CR, CL);
 					break;
-				case 11:
-				case 15: // main diagonal (symmetric wrt 180° rotation)
+				case 26:
+				case 27: // main diagonal (symmetric wrt 180° rotation)
 					poly(g, TL, TR, BL);
+					break;
+				case 28: // corner-pointing triangles in opposite corners (180°
+				case 29: // symmetry)
+					poly(g, TL, TC, CR, BR, BC, CL);
+					break;
+				case 30: // rhombus (90° symmetry)
+					poly(g, TC, CR, BC, CR);
+					break;
+				case 31: // diagonal blocks (90° symmetry when inverted)
+					poly(g, TL, TC, CC, CL);
+					poly(g, TC, TR, CR, CC);
 					break;
 				}
 				g.setTransform(tfm);
