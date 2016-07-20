@@ -86,10 +86,10 @@ public class MetadataUpdateThread extends Thread {
 					// by another hour (worst case).
 					Thread.sleep(INTERVAL * 1000);
 				} else
-					// retry very quickly on failure. this assumes that errors
-					// are caused by shibboleth restarts, but if shibboleth
-					// isn't running or unreachable, the discovery is broken
-					// anyway.
+					// retry very quickly on failure. this assumes that all
+					// errors are caused by short-term problems on the metadata
+					// server, but if it's down anyway, bombarding it with
+					// requests will not do much extra harm.
 					Thread.sleep(1 * 60 * 1000);
 			} catch (final InterruptedException e) {
 				break;
@@ -107,8 +107,15 @@ public class MetadataUpdateThread extends Thread {
 	private boolean updateMetadata(final Date lastModified) {
 		try {
 			final Document doc = HTTP.getXML(metadataURL, lastModified);
+			if (doc == null) {
+				LOGGER.log(Level.INFO, "metadata not modified");
+				return true;
+			}
 			idpParser.update(doc);
 			spParser.update(doc);
+			LOGGER.log(Level.INFO,
+					"metadata update successful, " + idpParser.getNumIdPs()
+							+ " IdPs, " + spParser.getNumSPs() + " SPs");
 			return true;
 		} catch (final Exception e) {
 			LOGGER.log(Level.WARNING,

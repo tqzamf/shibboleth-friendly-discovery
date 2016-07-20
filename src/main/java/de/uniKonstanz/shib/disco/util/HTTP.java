@@ -118,7 +118,8 @@ public class HTTP {
 	 * @param lastModified
 	 *            timestamp of last download, or <code>null</code> to download
 	 *            the file unconditionally
-	 * @return an XML {@link Document} containing the parsed DOM tree
+	 * @return an XML {@link Document} containing the parsed DOM tree, or
+	 *         <code>null</code> if it wasn't modified
 	 * @throws IOException
 	 *             on IO errors
 	 */
@@ -127,6 +128,8 @@ public class HTTP {
 		final HttpGet req = getRequest(url, lastModified);
 		try {
 			final HttpEntity entity = performRequest(req);
+			if (entity == null)
+				return null; // not modified
 			return docBuilder.parse(entity.getContent());
 		} catch (final SAXException e) {
 			throw new IOException("parsing failed", e);

@@ -251,4 +251,9 @@ class IdPMetaParser {
 			return a.compareTo(b);
 		}
 	}
+
+	public int getNumIdPs() {
+		final Map<String, IdPMeta> meta = metadata;
+		return meta != null ? meta.size() : 0;
+	}
 }
