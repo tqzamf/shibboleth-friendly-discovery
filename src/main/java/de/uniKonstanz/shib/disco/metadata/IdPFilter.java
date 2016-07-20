@@ -23,6 +23,14 @@ public class IdPFilter implements Runnable {
 	 */
 	private static final long MAX_DELAY = 500;
 	/**
+	 * Maximum time, in milliseconds, that the filter update will block a
+	 * request before giving up and not filtering at all. This is a very
+	 * different trade-off because showing the full, unfiltered list is much
+	 * more annoying than just a stale list which, in almost all cases, will
+	 * differ by a single recently changed IdP at most.
+	 */
+	private static final long MAX_DELAY_WITHOUT_FALLBACK = 3000;
+	/**
 	 * Amount of time, in seconds, that the list of accepted IdPs will be
 	 * cached.
 	 */
@@ -41,11 +49,15 @@ public class IdPFilter implements Runnable {
 
 	@Override
 	public void run() {
-		final HashSet<IdPMeta> list = update();
-		synchronized (this) {
-			idps = list;
-			thread = null;
-			lastReload = System.currentTimeMillis();
+		HashSet<IdPMeta> list = null;
+		try {
+			list = update();
+		} finally {
+			synchronized (this) {
+				idps = list;
+				thread = null;
+				lastReload = System.currentTimeMillis();
+			}
 		}
 	}
 
@@ -74,6 +86,7 @@ public class IdPFilter implements Runnable {
 			return idps;
 
 		final Thread thread;
+		final long delay;
 		synchronized (this) {
 			// avoid the race where the list is updated after the first check.
 			// don't immediately perform another update in that situation.
@@ -89,11 +102,16 @@ public class IdPFilter implements Runnable {
 				// there is already an update running; let's just wait for that
 				// to finish
 				thread = this.thread;
+
+			if (idps != null)
+				delay = MAX_DELAY;
+			else
+				delay = MAX_DELAY_WITHOUT_FALLBACK;
 		}
 
 		// give the update some time to download a new list of IdPs
 		try {
-			thread.join(MAX_DELAY);
+			thread.join(delay);
 		} catch (final InterruptedException e) {
 			// someone wants us to die. restore the interrupt flag.
 			Thread.currentThread().interrupt();

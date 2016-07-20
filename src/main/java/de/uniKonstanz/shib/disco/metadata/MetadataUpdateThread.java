@@ -59,9 +59,14 @@ public class MetadataUpdateThread extends Thread {
 		this.metadataURL = metadataURL;
 		idpParser = new IdPMetaParser(logoDir);
 		spParser = new SPMetaParser();
-		filters = CacheBuilder.newBuilder()
-				.expireAfterAccess(1, TimeUnit.HOURS)
-				.build(new CacheLoader<String, IdPFilter>() {
+		// cache filters for 4 days so they can make it over a weekend without
+		// expiring. because they handle updates themselves, this doesn't mean
+		// data will stay constant for 4 days, but that stale data will be
+		// available as a fallback for 4 days, allowing much shorter timeouts.
+		// there is at most one value per SP, and it's just a moderately sized
+		// HashSet each time; soft references are used as a fallback.
+		filters = CacheBuilder.newBuilder().expireAfterAccess(4, TimeUnit.DAYS)
+				.softValues().build(new CacheLoader<String, IdPFilter>() {
 					@Override
 					public IdPFilter load(final String url) throws SQLException {
 						return new IdPFilter(MetadataUpdateThread.this, url);
