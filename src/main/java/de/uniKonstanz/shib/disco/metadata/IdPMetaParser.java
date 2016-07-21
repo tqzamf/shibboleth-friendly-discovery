@@ -15,7 +15,6 @@ import java.util.logging.Logger;
 
 import javax.imageio.ImageIO;
 import javax.servlet.ServletException;
-import javax.xml.XMLConstants;
 import javax.xml.xpath.XPathExpressionException;
 
 import org.w3c.dom.Document;
@@ -25,15 +24,9 @@ import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
 import de.uniKonstanz.shib.disco.logo.FallbackLogoThread;
 import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
 
-class IdPMetaParser {
+class IdPMetaParser extends XPMetaParser {
 	private static final Logger LOGGER = Logger.getLogger(IdPMetaParser.class
 			.getCanonicalName());
-	private static final XPathNodeList IDP_NODES = new XPathNodeList(
-			"/md:EntitiesDescriptor/md:EntityDescriptor[md:IDPSSODescriptor]");
-	private static final XPathNodeList DISPLAYNAME_NODES = new XPathNodeList(
-			"md:IDPSSODescriptor/md:Extensions/mdui:UIInfo/mdui:DisplayName");
-	private static final XPathNodeList LOGO_NODES = new XPathNodeList(
-			"md:IDPSSODescriptor/md:Extensions/mdui:UIInfo/mdui:Logo");
 
 	private Map<String, IdPMeta> metadata;
 	private Map<String, List<IdPMeta>> allMetadata;
@@ -113,11 +106,15 @@ class IdPMetaParser {
 	}
 
 	/** Parses the XML document and starts asynchronous logo download. */
-	public void update(final Document doc) throws XPathExpressionException {
+	public void update(final Document doc) {
+		final Element root = doc.getDocumentElement();
+		if (!root.getTagName().equals("Metadata"))
+			throw new IllegalArgumentException("invalid root tag "
+					+ root.getTagName());
+
 		final HashMap<String, IdPMeta> map = new HashMap<String, IdPMeta>();
 		final HashSet<String> languages = new HashSet<String>();
-
-		for (final Element node : IDP_NODES.eval(doc)) {
+		for (final Element node : getChildren(root, "IDP")) {
 			// reuse existing metadata object if possible
 			final String entityID = node.getAttribute("entityID");
 			final IdPMeta meta;
@@ -154,9 +151,8 @@ class IdPMetaParser {
 			final Set<String> languages) throws XPathExpressionException {
 		// get display name in all available languages
 		String defaultName = null;
-		for (final Element i : DISPLAYNAME_NODES.eval(node)) {
-			final String lang = i.getAttributeNS(XMLConstants.XML_NS_URI,
-					"lang");
+		for (final Element i : getChildren(node, "DisplayName")) {
+			final String lang = i.getAttribute("lang");
 			final String displayName = i.getTextContent();
 			if (displayName.trim().isEmpty())
 				continue; // never useful
@@ -194,7 +190,7 @@ class IdPMetaParser {
 		String bestURL = null;
 		int bestPixels = -1;
 		final boolean bestKnown = false;
-		for (final Element i : LOGO_NODES.eval(node)) {
+		for (final Element i : getChildren(node, "Logo")) {
 			try {
 				final int width = Integer.parseInt(i.getAttribute("width"));
 				final int height = Integer.parseInt(i.getAttribute("height"));

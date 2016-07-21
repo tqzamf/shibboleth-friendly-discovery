@@ -7,9 +7,10 @@ import java.net.URLConnection;
 import java.nio.charset.Charset;
 import java.util.Date;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.dom.DOMResult;
+import javax.xml.transform.stream.StreamSource;
 
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
@@ -27,7 +28,6 @@ import org.apache.http.impl.client.LaxRedirectStrategy;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
 import org.w3c.dom.Document;
-import org.xml.sax.SAXException;
 
 /**
  * Wrapper around {@link HttpClient}, with sensible timeouts for every
@@ -40,7 +40,6 @@ public class HTTP {
 	private static final RequestConfig config;
 	private static final CloseableHttpClient client;
 	private static final ObjectMapper oma;
-	private static final DocumentBuilder docBuilder;
 
 	static {
 		config = RequestConfig.custom()
@@ -63,13 +62,6 @@ public class HTTP {
 				.setConnectionReuseStrategy(NoConnectionReuseStrategy.INSTANCE)
 				.setKeepAliveStrategy(new NoKeepAliveStrategy()).build();
 		oma = new ObjectMapper();
-		final DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
-		dbf.setNamespaceAware(true);
-		try {
-			docBuilder = dbf.newDocumentBuilder();
-		} catch (final ParserConfigurationException e) {
-			throw new RuntimeException(e);
-		}
 	}
 
 	/**
@@ -117,22 +109,31 @@ public class HTTP {
 	 *            the URL to read
 	 * @param lastModified
 	 *            timestamp of last download, or <code>null</code> to download
-	 *            the file unconditionally
+	 *            the file unconditionally @param trafo the {@link Transformer}
+	 *            used to convert the XML to DOM
 	 * @return an XML {@link Document} containing the parsed DOM tree, or
 	 *         <code>null</code> if it wasn't modified
 	 * @throws IOException
 	 *             on IO errors
+	 * @throws TransformerException
+	 *             if the XML transformation fails
 	 */
-	public static Document getXML(final String url, final Date lastModified)
-			throws IOException {
+	public static Document getXML(final String url, final Transformer trafo,
+			final Date lastModified) throws IOException, TransformerException {
 		final HttpGet req = getRequest(url, lastModified);
 		try {
 			final HttpEntity entity = performRequest(req);
 			if (entity == null)
 				return null; // not modified
-			return docBuilder.parse(entity.getContent());
-		} catch (final SAXException e) {
-			throw new IOException("parsing failed", e);
+
+			// transform XML into a DOM. ignores the encoding declared at HTTP
+			// level and lets the parser use whatever encoding is declared in
+			// the document itself.
+			// transforming from a StreamSource appears to be much (>10x) faster
+			// than transforming from a DOMSource...
+			final DOMResult dom = new DOMResult();
+			trafo.transform(new StreamSource(entity.getContent()), dom);
+			return (Document) dom.getNode();
 		} finally {
 			// make sure request can be reused
 			req.reset();

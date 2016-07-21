@@ -14,6 +14,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.stream.StreamSource;
 
 import org.w3c.dom.Document;
 
@@ -44,6 +48,7 @@ public class MetadataUpdateThread extends Thread {
 	private final IdPMetaParser idpParser;
 	private final SPMetaParser spParser;
 	private LoadingCache<String, IdPFilter> filters;
+	private Transformer trafo;
 
 	/**
 	 * @param metadataURL
@@ -59,6 +64,20 @@ public class MetadataUpdateThread extends Thread {
 		this.metadataURL = metadataURL;
 		idpParser = new IdPMetaParser(logoDir);
 		spParser = new SPMetaParser();
+
+		// load metadata by XSLT-transforming it, and then manually parsing the
+		// resulting temporary XML format. this is ridiculous, but massively
+		// (~20x) faster than directly running XPath queries against the
+		// original document. apparently, the Java XPath parser is just
+		// extremely slow on a DOM tree...
+		final StreamSource xslt = new StreamSource(
+				MetadataUpdateThread.class.getResourceAsStream("metadata.xslt"));
+		try {
+			trafo = TransformerFactory.newInstance().newTransformer(xslt);
+		} catch (final TransformerConfigurationException e) {
+			throw new ServletException("failed to compile XSLT", e);
+		}
+
 		// cache filters for 4 days so they can make it over a weekend without
 		// expiring. because they handle updates themselves, this doesn't mean
 		// data will stay constant for 4 days, but that stale data will be
@@ -106,12 +125,13 @@ public class MetadataUpdateThread extends Thread {
 	 * Performs the metadata update.
 	 * 
 	 * @param lastModified
+	 *            timestamp of last successful metadata download
 	 * 
 	 * @return <code>false</code> if metadata download fails
 	 */
 	private boolean updateMetadata(final Date lastModified) {
 		try {
-			final Document doc = HTTP.getXML(metadataURL, lastModified);
+			final Document doc = HTTP.getXML(metadataURL, trafo, lastModified);
 			if (doc == null) {
 				LOGGER.log(Level.INFO, "metadata not modified");
 				return true;
@@ -119,7 +139,7 @@ public class MetadataUpdateThread extends Thread {
 			idpParser.update(doc);
 			spParser.update(doc);
 			LOGGER.log(Level.INFO,
-					"metadata update successful, " + idpParser.getNumIdPs()
+					"metadata update successful; " + idpParser.getNumIdPs()
 							+ " IdPs, " + spParser.getNumSPs() + " SPs");
 			return true;
 		} catch (final Exception e) {

@@ -9,40 +9,33 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.xml.xpath.XPathExpressionException;
-
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 
-class SPMetaParser {
+class SPMetaParser extends XPMetaParser {
 	private static final Logger LOGGER = Logger.getLogger(SPMetaParser.class
 			.getCanonicalName());
 
-	private static final String DISCO_BINDING = "urn:oasis:names:tc:SAML:profiles:SSO:idp-discovery-protocol";
-	private final XPathNodeList SP_NODES = new XPathNodeList(
-			"/md:EntitiesDescriptor/md:EntityDescriptor[md:SPSSODescriptor]");
-	private final XPathNodeList DISCO_RESPONSE_NODES = new XPathNodeList(
-			"md:SPSSODescriptor/md:Extensions/idpdisco:DiscoveryResponse");
-
 	private HashMap<String, SPMeta> metadata;
 
-	public void update(final Document doc) throws XPathExpressionException {
+	@Override
+	public void update(final Document doc) {
+		final Element root = doc.getDocumentElement();
+		if (!root.getTagName().equals("Metadata"))
+			throw new IllegalArgumentException("invalid root tag "
+					+ root.getTagName());
+
 		final HashMap<String, SPMeta> map = new HashMap<String, SPMeta>();
-		// final TreeMap<Integer, String> responses = new TreeMap<Integer,
-		// String>();
-		for (final Element node : SP_NODES.eval(doc)) {
+		for (final Element node : getChildren(root, "SP")) {
 			// collect all DiscoveryResponse URLs and order them as specified in
 			// the metadata.
 			final List<String> responses = new ArrayList<String>();
 			int bestIndex = Integer.MAX_VALUE;
 			boolean bestDefault = false;
 			String defaultLocation = null;
-			for (final Element disco : DISCO_RESPONSE_NODES.eval(node)) {
-				if (!disco.getAttribute("Binding").equals(DISCO_BINDING))
-					continue;
-
+			for (final Element disco : getChildren(node, "ReponseLocation")) {
 				// check that location is a valid URL without any query string
-				final String location = disco.getAttribute("Location");
+				final String location = disco.getTextContent();
 				try {
 					final URL url = new URL(location);
 					if (url.getQuery() != null) {
