@@ -224,7 +224,11 @@ available:
 
 each of the discovery method takes the following parameters:
 
-* `entityID`: the entityID of the SP. mandatory.
+* `entityID`: the entityID of the SP. strongly recommended. it is possible
+	to set a default in the configuration (`shibboleth.default.sp`), but
+	if the discovery is used for more than a single service provider,
+	misconfigured services will show a discovery that logs the user into
+	the wrong service, which is bad for usability.
 	
 * `target`: the URL to visit after Shibboleth login handler. it's usually
 	better to instead set the `homeURL` in `<ApplicationDefaults>` in
@@ -299,6 +303,16 @@ Configuration
 	recommend bookmarking them), their prefixes have to be given in a
 	space-separated list. unless you changed this in the Shibboleth config,
 	the correct value is `ss:mem:`.
+
+* `shibboleth.default.sp`: entityID of a service provider to use if none
+	is given in the URL when calling the discovery. if this parameter is
+	omitted or set to the empty string, requests without an entityID will
+	simply return an error.
+
+	if the discovery is used for more than a single service provider,
+	it is strongly recommended to not set a default. otherwise,
+	misconfigured services could show a discovery that logs the user into
+	the wrong service, which is bad for usability.
 
 * `discovery.web.root`: external base URL under which the servlet is
 	reachable. this is generally `https://host.name/shibboleth/`, but

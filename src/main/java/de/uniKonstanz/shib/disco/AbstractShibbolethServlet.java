@@ -55,6 +55,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 */
 	protected List<String> ssPrefixes;
 	private MetadataUpdateThread meta;
+	private String defaultEntityID;
 
 	@Override
 	public void init() throws ServletException {
@@ -63,6 +64,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 				"");
 		ssPrefixes = Arrays.asList(getContextParameter(
 				"shibboleth.storageservice.prefixes").split(" +"));
+		defaultEntityID = getOptionalContextParameter("shibboleth.default.sp");
 	}
 
 	/**
@@ -80,6 +82,21 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 		if (value == null)
 			throw new ServletException("missing context parameter: " + name);
 		return value;
+	}
+
+	/**
+	 * Get an optional parameter from {@link ServletContext}.
+	 * 
+	 * @param name
+	 *            name of parameter
+	 * @return value of parameter, or <code>null</code> if it is missing or set
+	 *         to the empty string
+	 */
+	protected String getOptionalContextParameter(final String name) {
+		final String value = getServletContext().getInitParameter(name);
+		if (value != null && !value.isEmpty())
+			return value;
+		return null;
 	}
 
 	/**
@@ -359,14 +376,17 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 */
 	protected LoginParams parseLoginParams(final HttpServletRequest req,
 			final HttpServletResponse resp) throws IOException {
-		final String spEntityID = req.getParameter("entityID");
+		String spEntityID = req.getParameter("entityID");
 		if (spEntityID == null) {
-			// SP entityID is mandatory
-			LOGGER.info("request without SP entityID from "
-					+ req.getRemoteAddr() + "; sending error");
-			resp.sendError(HttpServletResponse.SC_BAD_REQUEST,
-					"missing entityID attribute");
-			return null;
+			if (defaultEntityID == null) {
+				// SP entityID is mandatory
+				LOGGER.info("request without SP entityID from "
+						+ req.getRemoteAddr() + "; sending error");
+				resp.sendError(HttpServletResponse.SC_BAD_REQUEST,
+						"missing entityID attribute");
+				return null;
+			}
+			spEntityID = defaultEntityID;
 		}
 
 		// follow the standard and use Shibboleth's "return=" parameter when
