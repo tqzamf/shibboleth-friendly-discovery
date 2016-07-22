@@ -24,7 +24,8 @@ $(function() {
 		// element if exactly one is left, else color the box red
 		// until the user edits something.
 		if (event.type == "keydown" && event.which == 13) {
-			var items = $("a.shibboleth-discovery-button:visible");
+			var items = $("a.shibboleth-discovery-button:visible")
+					.not($("#shibboleth-discovery-others"));
 			if (items.length == 1)
 				items[0].click();
 			else
