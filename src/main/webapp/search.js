@@ -24,7 +24,7 @@ $(function() {
 		// element if exactly one is left, else color the box red
 		// until the user edits something.
 		if (event.type == "keydown" && event.which == 13) {
-			var items = $("#shibboleth-discovery a:visible");
+			var items = $("a.shibboleth-discovery-button:visible");
 			if (items.length == 1)
 				items[0].click();
 			else
@@ -34,7 +34,7 @@ $(function() {
 			$(this).css("color", "");
 
 		var keywords = $(this).val().trim().toLowerCase().split(/\s+/);
-		var items = $("#shibboleth-discovery a");
+		var items = $("a.shibboleth-discovery-button");
 		// unhide all items before hiding some of them during filtering.
 		// note that if there are no keywords, this will unhide all
 		// items.
@@ -51,11 +51,20 @@ $(function() {
 				}
 			}
 		});
+		// hide all but the first 6 buttons
+		$("a.shibboleth-discovery-button:visible")
+				.slice(shibbolethDiscoverySearchLimit)
+				.css("display", "none");
+		// unhide the "others" button. technically unnecessary because
+		// when searching, the full list is actually shown already, but
+		// keeping it is less disruptive to the UI and may be more
+		// reassuring to the user.
+		$("#shibboleth-discovery-others").css("display", "block");
 	});
 	// pre-focus the box, so that the user just has to start typing.
 	// this is to maximize usability for regular users. it means that
 	// new users may not notice the functionality even exists, but they
 	// will if they ever un-focus the box.
-	$("#shibboleth-discovery-wayf").append(box);
+	$("#shibboleth-discovery-wayf").after(box);
 	box.focus();
 });

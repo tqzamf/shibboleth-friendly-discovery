@@ -4,7 +4,6 @@ import java.io.File;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -158,20 +157,8 @@ public class MetadataUpdateThread extends Thread {
 		idpParser.addMetadata(list, entities);
 	}
 
-	public List<IdPMeta> getAllMetadata(final String lang,
-			final LoginParams params) {
-		final List<IdPMeta> list = idpParser.getAllMetadata(lang);
-		final Collection<IdPMeta> filter = getFilter(params);
-		// no filter, so just return the entire list as-is
-		if (filter == null)
-			return list;
-
-		// only keep IdPs that the SP actually accepts for login
-		final ArrayList<IdPMeta> res = new ArrayList<IdPMeta>(list.size());
-		for (final IdPMeta idp : list)
-			if (filter.contains(idp))
-				res.add(idp);
-		return res;
+	public List<IdPMeta> getAllMetadata(final String lang) {
+		return idpParser.getAllMetadata(lang);
 	}
 
 	public boolean isValidResponseLocation(final String entityID) {

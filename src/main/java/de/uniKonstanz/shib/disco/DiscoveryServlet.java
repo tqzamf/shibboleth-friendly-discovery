@@ -51,8 +51,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private MetadataUpdateThread metaUpdate;
 	private ConnectionPool db;
 	private String metadataURL;
-	private String friendlyHeader;
-	private String fullHeader;
+	private String header1;
+	private String header2;
 	private String footer;
 	private IdPRanking ranking;
 	private int numTopIdPs;
@@ -68,8 +68,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				.parseInt(getContextParameter("discovery.friendly.idps"));
 
 		jsHeader = getResourceAsString("header.js");
-		friendlyHeader = getResourceAsString("friendly-header.html");
-		fullHeader = getResourceAsString("full-header.html");
+		header1 = getResourceAsString("header1.html");
+		header2 = getResourceAsString("header2.html");
 		footer = getResourceAsString("footer.html");
 		wayf = normalize(getResourceAsString("wayf.html"));
 		noIdPsError = getResourceAsString("no-idps.html");
@@ -148,8 +148,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildFullDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = metaUpdate.getAllMetadata(DEFAULT_LANGUAGE,
-				params);
+		final List<IdPMeta> idps = metaUpdate.getAllMetadata(DEFAULT_LANGUAGE);
 		if (idps.isEmpty()) {
 			// if there are no valid IdPs, the user cannot log in. there is no
 			// point in showing an empty discovery page; just report an error
@@ -166,10 +165,11 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		}
 
 		final StringBuilder buffer = new StringBuilder();
-		buffer.append(fullHeader);
+		buffer.append(header1);
+		buffer.append("var shibbolethDiscoverySearchLimit = Number.POSITIVE_INFINITY;");
+		buffer.append(header2);
 		buildNotices(buffer, params);
-		for (final IdPMeta idp : idps)
-			buildHTML(buffer, idp, params);
+		buildHTML(buffer, idps, params, Integer.MAX_VALUE);
 		buffer.append(footer);
 		// page won't change until the next metadata update
 		setCacheHeaders(resp, MetadataUpdateThread.INTERVAL);
@@ -194,10 +194,12 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		}
 
 		final StringBuilder buffer = new StringBuilder();
-		buffer.append(friendlyHeader);
+		buffer.append(header1);
+		buffer.append("var shibbolethDiscoverySearchLimit = " + numTopIdPs
+				+ ";");
+		buffer.append(header2);
 		buildNotices(buffer, params);
-		for (final IdPMeta idp : idps)
-			buildHTML(buffer, idp, params);
+		buildHTML(buffer, idps, params, numTopIdPs);
 		buildOtherIdPsButton(buffer, params);
 		buffer.append(footer);
 
@@ -231,10 +233,10 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 
 		final StringBuilder buffer = new StringBuilder();
 		buffer.append(jsHeader);
-		buffer.append("shibbolethDiscovery('").append(webRoot).append("','");
+		buffer.append("shibbolethDiscovery('").append(webRoot)
+				.append("'," + numTopIdPs + ",'");
 		buildNotices(buffer, params);
-		for (final IdPMeta idp : idps)
-			buildHTML(buffer, idp, params);
+		buildHTML(buffer, idps, params, numTopIdPs);
 		buildOtherIdPsButton(buffer, params);
 		buffer.append("<br />');");
 
@@ -242,6 +244,20 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		// it shouldn't be cached.
 		setCacheHeaders(resp, 0);
 		sendResponse(resp, buffer, "text/javascript");
+	}
+
+	private void buildHTML(final StringBuilder buffer,
+			final List<IdPMeta> idps, final LoginParams params, final int limit) {
+		final Collection<IdPMeta> filter = metaUpdate.getFilter(params);
+
+		int n = 0;
+		for (final IdPMeta idp : idps) {
+			// only add IdPs that the SP actually accepts for login
+			if (filter == null || filter.contains(idp)) {
+				buildHTML(buffer, idp, params, n >= limit);
+				n++;
+			}
+		}
 	}
 
 	/**
@@ -262,6 +278,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		addCookieFavorite(list, req);
 		addNethashFavorites(list, req);
 		addGlobalFavorites(list);
+		addEverything(list);
 
 		// limit to correct number of IdPs, filter by the IdPs actually accepted
 		// by the SP, and convert to an actual List
@@ -272,8 +289,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		for (final IdPMeta idp : list)
 			if (filter == null || filter.contains(idp)) {
 				res.add(idp);
-				if (res.size() >= numTopIdPs)
-					break;
+				// if (res.size() >= numTopIdPs)
+				// break;
 			}
 		return res;
 	}
@@ -338,6 +355,17 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	}
 
 	/**
+	 * Appends the entire list of IdPs. Order matters; this is called last.
+	 */
+	private void addEverything(final LinkedHashSet<IdPMeta> list) {
+		final List<IdPMeta> entities = metaUpdate
+				.getAllMetadata(DEFAULT_LANGUAGE);
+		if (entities != null)
+			for (final IdPMeta e : entities)
+				list.add(e);
+	}
+
+	/**
 	 * Adds the "Where are you from" prompt, and the
 	 * "you can bookmark these links" notice if appropriate.
 	 */
@@ -347,7 +375,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		// bookmark notice. always present, but change text to indicate whether
 		// success can be expected.
 		buffer.append("<p><a href=\"").append(webRoot)
-				.append("/bookmarks.html").append("\" target=\"_blank\">");
+				.append("/bookmarks.html\" target=\"_blank\">");
 		if (params.canBookmark())
 			buffer.append("How to bookmark these links");
 		else
@@ -357,12 +385,21 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 
 	/** Adds the HTML for a single IdP button. */
 	private void buildHTML(final StringBuilder buffer, final IdPMeta idp,
-			final LoginParams params) {
+			final LoginParams params, final boolean extra) {
+		// WARNING this is directly included both as literal HTML and in a
+		// single-quotes javascript string! thus, they must not include:
+		// - newlines
+		// - single quotes
+		// - backslashes
+
 		// link; parameters carefully encoded
 		buffer.append("<a href=\"").append(webRoot).append("/login?");
 		params.appendToURL(buffer, "&amp;");
 		buffer.append("&amp;idpEntityID=").append(idp.getEncodedEntityID())
-				.append("\" class=\"shibboleth-discovery-button\">");
+				.append("\" class=\"shibboleth-discovery-button\"");
+		if (extra)
+			buffer.append(" style=\"display:none\"");
+		buffer.append('>');
 		// logo; filename never contains anything unsafe
 		buffer.append("<img src=\"").append(webRoot).append("/logo/")
 				.append(idp.getLogoFilename()).append("\" />");

@@ -6,6 +6,7 @@ import java.util.Map;
 import org.apache.commons.codec.digest.DigestUtils;
 
 import com.google.common.escape.Escaper;
+import com.google.common.escape.Escapers;
 import com.google.common.html.HtmlEscapers;
 
 import de.uniKonstanz.shib.disco.AbstractShibbolethServlet;
@@ -17,7 +18,15 @@ import de.uniKonstanz.shib.disco.logo.LogoUpdaterThread;
  * logo; compares case-insensitively according to display name.
  */
 public class IdPMeta extends XPMeta<IdPMeta> implements Comparable<IdPMeta> {
-	private static final Escaper HTML_ESCAPER = HtmlEscapers.htmlEscaper();
+	/**
+	 * Like {@link HtmlEscapers#htmlEscaper()}, but include the backslash as
+	 * well so that the resulting text can be included in a single-quoted
+	 * javascript string without further escaping.
+	 */
+	private static final Escaper HTML_ESCAPER = Escapers.builder()
+			.addEscape('"', "&quot;").addEscape('\'', "&#39;")
+			.addEscape('\\', "&#92;").addEscape('&', "&amp;")
+			.addEscape('<', "&lt;").addEscape('>', "&gt;").build();
 	private static final String DEFAULT_DISPLAY_NAME_KEY = null;
 	private static final long LOGO_SHELF_LIFE = 1000 * 60 * 60 * 2;
 

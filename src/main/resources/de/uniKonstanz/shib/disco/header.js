@@ -1,4 +1,4 @@
-function shibbolethDiscovery(base, html) {
+function shibbolethDiscovery(base, searchLimit, html) {
 	function insertDiscovery() {
 		// insert the CSS, as a DOM element
 		var link = document.createElement("link");
@@ -10,10 +10,18 @@ function shibbolethDiscovery(base, html) {
 		// create tag containing discovery HTML snippet
 		var container = document.createElement("div");
 		container.id = "shibboleth-discovery";
-		if ("undefined" != typeof jQuery)
+		if ("undefined" != typeof jQuery) {
 			// use jQuery if present
 			jQuery(container).html(html);
-		else if ("undefined" != typeof container.insertAdjacentHTML)
+			// try to enable search as well (search requires jQuery to
+			// be present on the host page)
+			shibbolethDiscoverySearchLimit = searchLimit;
+			jQuery.ajax({
+				url: base + "/search.js",
+				dataType: "script",
+				cache: true
+			});
+		} else if ("undefined" != typeof container.insertAdjacentHTML)
 			// all modern browsers
 			container.insertAdjacentHTML("afterBegin", html);
 		else
