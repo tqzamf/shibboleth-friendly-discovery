@@ -4,6 +4,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -36,6 +37,8 @@ public class LoginParams {
 
 	private boolean defaultReturn;
 
+	private final List<String> languages;
+
 	/**
 	 * @param meta
 	 *            the {@link MetadataUpdateThread} providing information about
@@ -54,12 +57,15 @@ public class LoginParams {
 	 * @param passive
 	 *            the <code>isPassive</code> parameter from the query string,
 	 *            usually <code>null</code>
+	 * @param languages
+	 *            languages the client wants, in order of preference
 	 */
 	public LoginParams(final MetadataUpdateThread meta,
 			final String spEntityID, final String returnLocation,
 			final String target, final String returnIDParam,
-			final String passive) {
+			final String passive, final List<String> languages) {
 		this.spEntityID = spEntityID;
+		this.languages = languages;
 		this.passive = passive != null && passive.equalsIgnoreCase("true");
 
 		if (returnLocation != null) {
@@ -237,5 +243,13 @@ public class LoginParams {
 	 */
 	public boolean isValidReturnLocation() {
 		return validReturn;
+	}
+
+	/**
+	 * @return the list of languages requested by the lient, most preferred
+	 *         language first
+	 */
+	public Iterable<String> getLanguages() {
+		return languages;
 	}
 }

@@ -50,16 +50,20 @@ public class IdPMeta extends XPMeta<IdPMeta> implements Comparable<IdPMeta> {
 	 * {@link AbstractShibbolethServlet#DEFAULT_LANGUAGE} if the preferred
 	 * language isn't available.
 	 * 
-	 * @param lang
-	 *            preferred language
+	 * @param languages
+	 *            list of preferred languages, in order
 	 * 
 	 * @return the escaped display name
 	 */
-	public String getEscapedDisplayName(final String lang) {
-		final String escDisplayName = escDisplayNames.get(lang);
-		if (escDisplayName != null)
-			return escDisplayName;
-		return escDisplayNames.get(DEFAULT_DISPLAY_NAME_KEY);
+	public String getEscapedDisplayName(final Iterable<String> languages) {
+		final Map<String, String> names = escDisplayNames;
+		// try to find name in the best language we have
+		for (final String lang : languages)
+			if (names.containsKey(lang))
+				return names.get(lang);
+		// else fall back to the default display name, in whatever language it
+		// may happen to be
+		return names.get(DEFAULT_DISPLAY_NAME_KEY);
 	}
 
 	/**

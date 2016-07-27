@@ -147,7 +147,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildFullDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = metaUpdate.getAllMetadata(DEFAULT_LANGUAGE);
+		final List<IdPMeta> idps = metaUpdate.getAllMetadata(params
+				.getLanguages());
 		if (idps.isEmpty()) {
 			// if there are no valid IdPs, the user cannot log in. there is no
 			// point in showing an empty discovery page; just report an error
@@ -279,7 +280,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 		addCookieFavorite(list, req);
 		addNethashFavorites(list, req);
 		addGlobalFavorites(list);
-		addEverything(list);
+		addEverything(list, params.getLanguages());
 		return list;
 	}
 
@@ -343,11 +344,11 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	}
 
 	/**
-	 * Appends the entire list of IdPs. Order matters; this is called last.
+	 * Appends the entire list of IdPs. Order matters; this must be called last.
 	 */
-	private void addEverything(final LinkedHashSet<IdPMeta> list) {
-		final List<IdPMeta> entities = metaUpdate
-				.getAllMetadata(DEFAULT_LANGUAGE);
+	private void addEverything(final LinkedHashSet<IdPMeta> list,
+			final Iterable<String> languages) {
+		final List<IdPMeta> entities = metaUpdate.getAllMetadata(languages);
 		if (entities != null)
 			for (final IdPMeta e : entities)
 				list.add(e);
@@ -393,7 +394,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				.append(idp.getLogoFilename()).append("\" />");
 		// display name (escaped)
 		buffer.append("<p>")
-				.append(idp.getEscapedDisplayName(DEFAULT_LANGUAGE))
+				.append(idp.getEscapedDisplayName(params.getLanguages()))
 				.append("</p></a>");
 	}
 

@@ -157,8 +157,8 @@ public class MetadataUpdateThread extends Thread {
 		idpParser.addMetadata(list, entities);
 	}
 
-	public List<IdPMeta> getAllMetadata(final String lang) {
-		return idpParser.getAllMetadata(lang);
+	public List<IdPMeta> getAllMetadata(final Iterable<String> languages) {
+		return idpParser.getAllMetadata(languages);
 	}
 
 	public boolean isValidResponseLocation(final String entityID) {

@@ -7,8 +7,11 @@ import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -389,6 +392,15 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 			spEntityID = defaultEntityID;
 		}
 
+		// obtain the list of languages that the client will accept by
+		// extracting just the "language" field from the locales it supports.
+		final List<String> languages = new ArrayList<String>();
+		for (final Enumeration<Locale> i = req.getLocales(); i
+				.hasMoreElements();) {
+			final Locale loc = i.nextElement();
+			languages.add(loc.getLanguage());
+		}
+
 		// follow the standard and use Shibboleth's "return=" parameter when
 		// present, or our own "target=" parameter if not.
 		final MetadataUpdateThread meta = getMetadataUpdateThread();
@@ -396,7 +408,8 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 		final String target = req.getParameter("target");
 		final String param = req.getParameter("returnIDParam");
 		final String passive = req.getParameter("isPassive");
-		return new LoginParams(meta, spEntityID, ret, target, param, passive);
+		return new LoginParams(meta, spEntityID, ret, target, param, passive,
+				languages);
 	}
 
 	protected MetadataUpdateThread getMetadataUpdateThread() {

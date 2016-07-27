@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -94,18 +95,26 @@ class IdPMetaParser extends XPMetaParser {
 	 * Obtains a list of all known IdPs, sorted by display name. Never returns
 	 * <code>null</code>, but may return an empty list.
 	 * 
-	 * @param lang
-	 *            preferred language (for sorting)
+	 * @param languages
+	 *            preferred languages (for sorting)
 	 * 
 	 * @return sorted list of {@link IdPMeta}s
 	 */
-	public List<IdPMeta> getAllMetadata(final String lang) {
-		if (allMetadata == null)
+	public List<IdPMeta> getAllMetadata(final Iterable<String> languages) {
+		final Map<String, List<IdPMeta>> meta = allMetadata;
+		if (meta == null)
 			return Collections.emptyList();
-		return allMetadata.get(lang);
+		// try to find list in the best language we have
+		for (final String lang : languages)
+			if (meta.containsKey(lang))
+				return meta.get(lang);
+		// else fall back to the default language. update() ensures this entry
+		// always exists.
+		return meta.get(AbstractShibbolethServlet.DEFAULT_LANGUAGE);
 	}
 
 	/** Parses the XML document and starts asynchronous logo download. */
+	@Override
 	public void update(final Document doc) {
 		final Element root = doc.getDocumentElement();
 		if (!root.getTagName().equals("Metadata"))
@@ -136,6 +145,10 @@ class IdPMetaParser extends XPMetaParser {
 
 		// pre-sort the list of all known IdPs. avoids re-sorting it for every
 		// request.
+		// also ensure there is always an entry for the default language.
+		// getAllMetadata() assumes there will always be one, but the metadata
+		// might not contain an entry in the default language for any IdP.
+		languages.add(AbstractShibbolethServlet.DEFAULT_LANGUAGE);
 		final HashMap<String, List<IdPMeta>> all = new HashMap<String, List<IdPMeta>>();
 		for (final String lang : languages) {
 			final List<IdPMeta> list = new ArrayList<IdPMeta>(map.values());
@@ -157,9 +170,11 @@ class IdPMetaParser extends XPMetaParser {
 			if (displayName.trim().isEmpty())
 				continue; // never useful
 
-			// reduce to first 2 letters (ISO 2-letter code)
-			final String language = lang.substring(0, 2).toLowerCase();
-			if (lang.length() >= 2) {
+			// parse language tag and extract just the language bit. this
+			// ignores regional variants (en_GB, en_US) but allows fuzzy
+			// matching, ie. less fallbacks to the default language.
+			final String language = Locale.forLanguageTag(lang).getLanguage();
+			if (!lang.isEmpty()) {
 				// only bother to add display names in valid ISO 2-letter
 				// languages to the explicit list, but do consider them for the
 				// default display name below.
