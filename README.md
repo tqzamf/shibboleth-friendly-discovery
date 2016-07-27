@@ -15,7 +15,8 @@ this means:
 	* least recently used (cookie)
 	* most popular by /16 (IPv4) or /48 (IPv6) IP block
 	* global popularity
-* fallback list of all IdPs is searchable
+* fallback list of all IdPs is searchable; embedded list of IdPs is
+  searchable if host page contains jQuery
 * many links are bookmarkable
 * can be embedded in application
 * will only show IdPs that the SP accepts (obviously)
@@ -23,8 +24,8 @@ this means:
 other features:
 
 * easy to deploy (Tomcat webapp)
-* one instance can serve multiple SPs (as long as their list of accepted
-  IdPs is identical)
+* one instance can serve multiple SPs (as long as they are in the same
+  federation)
 * very scalable (>4k concurrent connections with a 150M heap, on a
   standard developer laptop)
 * no requirements for embedding, except that the page must not use the
