@@ -3,7 +3,6 @@ package de.uniKonstanz.shib.disco;
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -184,7 +183,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildFriendlyDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = getIdPList(req, params);
+		final Collection<IdPMeta> idps = getIdPList(req, params);
 		if (idps.isEmpty()) {
 			// in the (unlikely) case that none of the entityIDs are known,
 			// fall back to providing the complete list. this is more useful
@@ -229,7 +228,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildEmbeddedDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
-		final List<IdPMeta> idps = getIdPList(req, params);
+		final Iterable<IdPMeta> idps = getIdPList(req, params);
 
 		final StringBuilder buffer = new StringBuilder();
 		buffer.append(jsHeader);
@@ -247,7 +246,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	}
 
 	private void buildHTML(final StringBuilder buffer,
-			final List<IdPMeta> idps, final LoginParams params, final int limit) {
+			final Iterable<IdPMeta> idps, final LoginParams params,
+			final int limit) {
 		final Collection<IdPMeta> filter = metaUpdate.getFilter(params);
 
 		int n = 0;
@@ -261,38 +261,26 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	}
 
 	/**
-	 * Gets the {@link #numTopIdPs} "most likely" IdPs. These are, in order:
+	 * Gets the "most likely" IdPs. These are, in order:
 	 * <ol>
 	 * <li>the last one the client used, if any, as marked by a cookie named
 	 * {@link LoginServlet#IDP_COOKIE}
 	 * <li>the most popular ones for "his" network, as defined by
 	 * {@link #getClientNetworkHash(HttpServletRequest)}
 	 * <li>the globally most popular ones
+	 * <li>everything else
 	 * </ol>
 	 */
-	private List<IdPMeta> getIdPList(final HttpServletRequest req,
+	private Collection<IdPMeta> getIdPList(final HttpServletRequest req,
 			final LoginParams params) {
-		// known maximum size: favorite, and perhaps two lists of numTopIdPs
-		// entries
+		// LinkedHashSet retains order, so items added first will be at the top
+		// of the IdP list served to the client
 		final LinkedHashSet<IdPMeta> list = new LinkedHashSet<IdPMeta>();
 		addCookieFavorite(list, req);
 		addNethashFavorites(list, req);
 		addGlobalFavorites(list);
 		addEverything(list);
-
-		// limit to correct number of IdPs, filter by the IdPs actually accepted
-		// by the SP, and convert to an actual List
-		final MetadataUpdateThread meta = getMetadataUpdateThread();
-		final Collection<IdPMeta> filter = meta != null ? meta
-				.getFilter(params) : null;
-		final List<IdPMeta> res = new ArrayList<IdPMeta>(numTopIdPs);
-		for (final IdPMeta idp : list)
-			if (filter == null || filter.contains(idp)) {
-				res.add(idp);
-				// if (res.size() >= numTopIdPs)
-				// break;
-			}
-		return res;
+		return list;
 	}
 
 	/**
