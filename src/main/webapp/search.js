@@ -19,7 +19,7 @@ $(function() {
 		}
 	});
 	// the actual filtering logic
-	box.bind("change keyup keydown paste", function(event) {
+	box.bind("change keyup keydown paste focus blur", function(event) {
 		// handling ENTER keypress in search box: click the single
 		// element if exactly one is left, else color the box red
 		// until the user edits something.
