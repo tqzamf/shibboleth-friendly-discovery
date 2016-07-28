@@ -6,6 +6,7 @@
 #shibboleth-discovery * {
 	font-family: sans-serif;
 	font-weight: normal;
+	line-height: 100%;
 }
 
 #shibboleth-discovery h3 {
@@ -24,10 +25,10 @@
 #shibboleth-discovery a.shibboleth-discovery-button {
 	display: block;
 	float: left;
-	width: 11em;
-	height: 8em;
+	width: 20ex;
+	height: 13.5ex;
 	margin: 0em 1em 1em 0em;
-	padding: .5em 1em 1em 1em;
+	padding: .5ex 1ex 1ex 1ex;
 	border: 1px solid #eee;
 	background-color: #fff;
 	color: black;
@@ -40,13 +41,14 @@
 #shibboleth-discovery a.shibboleth-discovery-button:hover {
 	border: 1px solid #ccc;
 	background-color: #eee;
+	overflow: visible;
 }
 
 #shibboleth-discovery a.shibboleth-discovery-button img {
 	display: block;
-	height: 5.5em;
-	width: 11em;
-	margin-bottom: .25em;
+	height: 10ex;
+	width: 20ex;
+	margin-bottom: .5ex;
 	border: none;
 }
 
