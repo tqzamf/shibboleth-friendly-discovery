@@ -34,7 +34,12 @@ $(function() {
 		} else if (event.type != "keyup" || event.which != 13)
 			$(this).css("color", "");
 
-		var keywords = $(this).val().trim().toLowerCase().split(/\s+/);
+		// only use filter text if it isn't the dummy text.
+		var keywords;
+		if (!$(this).data("dummy"))
+			keywords = $(this).val().trim().toLowerCase().split(/\s+/);
+		else
+			keywords = "";
 		var items = $("a.shibboleth-discovery-button");
 		// unhide all items before hiding some of them during filtering.
 		// note that if there are no keywords, this will unhide all
