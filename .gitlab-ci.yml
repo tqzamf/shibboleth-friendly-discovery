@@ -1,0 +1,9 @@
+image: maven:3.3.3-jdk-8
+
+compile:
+  script:
+   - mkdir -p /cache/m2 && ln -s /cache/m2 ~/.m2/repository || true
+   - mvn clean install
+  artifacts:
+    paths:
+     - target/*.jar
