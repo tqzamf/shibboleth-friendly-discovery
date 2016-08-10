@@ -6,4 +6,4 @@ compile:
    - mvn clean install
   artifacts:
     paths:
-     - target/*.jar
+     - target/*.war
