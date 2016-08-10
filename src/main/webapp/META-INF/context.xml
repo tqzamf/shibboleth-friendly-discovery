@@ -7,7 +7,7 @@
 	 	description="JDBC database connection config as a DataSource resource" />
 
 	<Parameter name="shibboleth.metadata.url" value="https://www.aai.dfn.de/fileadmin/metadata/DFN-AAI-Test-metadata.xml"
-		description="absolute URL to Shibboleth metadata file; either file:///, localhost, or using SSL" />
+		description="absolute URL to Shibboleth metadata file; either localhost or SSL" />
 	<Parameter name="shibboleth.storageservice.prefixes" value="ss:mem:"
 		description="space-separated list of StorageService(s) prefixes used in target= parameters; almost always 'ss:mem:'" />
 	<Parameter name="shibboleth.default.sp" value=""
