@@ -167,8 +167,7 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 				last--;
 			}
 		}
-		System.out.println("detected IP: " + client.toString() + " for "
-				+ header);
+		LOGGER.fine("detected IP " + client.toString() + " for " + header);
 
 		final byte[] addr = client.getAddress();
 		// IPv4: uses the /16 prefix. should roughly match the network size of a

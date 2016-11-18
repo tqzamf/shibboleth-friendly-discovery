@@ -50,9 +50,9 @@ How to deploy
 
 	```bash
 	sudo -u postgres createuser -D -I -S shibdisco
+	sudo -u postgres createdb shibdisco
 	sudo -u postgres psql shibdisco \
 		-c "alter user shibdisco password 'secret'"
-	sudo -u postgres createdb shibdisco
 	```
 
 	non-PostgreSQL databases should be possible.
@@ -216,12 +216,24 @@ available:
 * `discovery/embed`: a javascript snippet that embeds `discovery/friendly`,
 	replacing the element with `id="shibboleth-discovery"` (which can be
 	the `<script>` tag that embeds the script, or any other element
-	declared before the `<script>` tag). for correct operation, the
-	embedding page must not use the namespaces `shibboleth-discovery*`
-	(CSS, HTML IDs, Cookies) and `shibbolethDiscovery*` (JavaScript).
-	the snippet will use jQuery to do the embedding if jQuery is present
-	in the embedding page, and fall back to plain old DOM methods if no
-	jQuery is found.
+	declared before the `<script>` tag).
+
+	for correct operation, the embedding page must not use the namespaces
+	`shibboleth-discovery*` (CSS, HTML IDs, Cookies) and
+	`shibbolethDiscovery*` (JavaScript). the snippet will use jQuery to do
+	the embedding if jQuery is present in the embedding page, and fall
+	back to plain old DOM methods if no jQuery is found.
+
+* `discovery/integrate`: identical to `discovery/embed`, but intended for
+	tighter integration into the host page. it relies on the host page for
+	CSS and jQuery; there are no fallbacks.
+
+	for correct operation, the embedding page must provide jQuery ≥1.11.2
+	as well as suitable CSS styles for the discovery elements within the
+	`shibboleth-discovery` div. See `disco.css` in the WAR for example
+	styles. The host page shouldn't otherwise use the namespaces
+	`shibboleth-discovery*` (HTML IDs, Cookies) and `shibbolethDiscovery*`
+	(JavaScript) in any way if possible.
 
 each of the discovery method takes the following parameters:
 
@@ -267,7 +279,7 @@ Configuration
 
 	* `url`: the JDBC connection URL, without username and password, but
 		including any other options you would like to set, especially
-		`ssl=true`. see the PostgreSQL (or other database= documentation
+		`ssl=true`. see the PostgreSQL (or other database) documentation
 		for the full syntax, or just use PostgreSQL and adapt the example
 		`jdbc:postgresql://localhost/shibdisco?ssl=true`.
 		note that because the context config file is an XML document, any
@@ -280,7 +292,7 @@ Configuration
 		these values will likely not improve performance much.
 
 	* `closeMethod`: generally just `close` so that connections are
-		actually closed when they are disposed of.
+		actively closed when they are being disposed of.
 
 	* `validationQuery`, `testOnBorrow`: to guard against timed-out
 		connections, `testOnBorrow` should be `true` and `validationQuery`

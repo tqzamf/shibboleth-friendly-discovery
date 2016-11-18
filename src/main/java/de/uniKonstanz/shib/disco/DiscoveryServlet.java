@@ -56,6 +56,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private IdPRanking ranking;
 	private int numTopIdPs;
 	private String jsHeader;
+	private String searchHeader;
 	private String wayf;
 	private String noIdPsError;
 
@@ -67,6 +68,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 				.parseInt(getContextParameter("discovery.friendly.idps"));
 
 		jsHeader = getResourceAsString("header.js");
+		searchHeader = getResourceAsString("searchable.js");
 		header1 = getResourceAsString("header1.html");
 		header2 = getResourceAsString("header2.html");
 		footer = getResourceAsString("footer.html");
@@ -132,6 +134,8 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 			buildFullDiscovery(req, resp, params);
 		else if (pi.equalsIgnoreCase("/embed"))
 			buildEmbeddedDiscovery(req, resp, params);
+		else if (pi.equalsIgnoreCase("/integrate"))
+			buildSearchableDiscovery(req, resp, params);
 		else if (pi.equalsIgnoreCase("/friendly"))
 			buildFriendlyDiscovery(req, resp, params);
 		else
@@ -210,6 +214,28 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	}
 
 	/**
+	 * Builds the {@code integrate} discovery. This is the same style as the
+	 * {@code friendly} discovery, but packed as a JavaScript snippet that
+	 * inserts the relevant HTML.
+	 * 
+	 * The generated JavaScript is meant for active integration by the host
+	 * page. It will replace the HTML element with ID
+	 * {@code shibboleth-discovery}, which can be the {@code <script>} tag that
+	 * loads it, or a non-javascript fallback link to discovery.
+	 * 
+	 * This discovery flavor requires jQuery ≥1.11.2 to be present on the host
+	 * page, and the host page is also responsible for all styling of the
+	 * discovery elements within the {@code shibboleth-discovery} div. The host
+	 * page shoudln't otherwise use the namespaces {@code shibboleth-discovery*}
+	 * (HTML IDs, Cookies) and {@code shibbolethDiscovery*} (JavaScript).
+	 */
+	private void buildSearchableDiscovery(final HttpServletRequest req,
+			final HttpServletResponse resp, final LoginParams params)
+			throws IOException {
+		buildJavascriptDiscovery(req, resp, searchHeader, params);
+	}
+
+	/**
 	 * Builds the {@code embed} discovery. This is the same style as the
 	 * {@code friendly} discovery, but packed as a JavaScript snippet that
 	 * inserts the relevant HTML.
@@ -229,10 +255,16 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 	private void buildEmbeddedDiscovery(final HttpServletRequest req,
 			final HttpServletResponse resp, final LoginParams params)
 			throws IOException {
+		buildJavascriptDiscovery(req, resp, jsHeader, params);
+	}
+
+	private void buildJavascriptDiscovery(final HttpServletRequest req,
+			final HttpServletResponse resp, final String header,
+			final LoginParams params) throws IOException {
 		final Iterable<IdPMeta> idps = getIdPList(req, params);
 
 		final StringBuilder buffer = new StringBuilder();
-		buffer.append(jsHeader);
+		buffer.append(header);
 		buffer.append("shibbolethDiscovery('").append(webRoot)
 				.append("'," + numTopIdPs + ",'");
 		buildNotices(buffer, params);

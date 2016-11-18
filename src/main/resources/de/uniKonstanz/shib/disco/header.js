@@ -10,18 +10,10 @@ function shibbolethDiscovery(base, searchLimit, html) {
 		// create tag containing discovery HTML snippet
 		var container = document.createElement("div");
 		container.id = "shibboleth-discovery";
-		if ("undefined" != typeof jQuery) {
+		if ("undefined" != typeof jQuery)
 			// use jQuery if present
 			jQuery(container).html(html);
-			// try to enable search as well (search requires jQuery to
-			// be present on the host page)
-			shibbolethDiscoverySearchLimit = searchLimit;
-			jQuery.ajax({
-				url: base + "/search.js",
-				dataType: "script",
-				cache: true
-			});
-		} else if ("undefined" != typeof container.insertAdjacentHTML)
+		else if ("undefined" != typeof container.insertAdjacentHTML)
 			// all modern browsers
 			container.insertAdjacentHTML("afterBegin", html);
 		else
@@ -35,6 +27,17 @@ function shibbolethDiscovery(base, searchLimit, html) {
 		// for graceful failure when there is no javascript.
 		var target = document.getElementById("shibboleth-discovery");
 		target.parentNode.replaceChild(container, target);
+
+		// try to enable search as well (search requires jQuery to
+		// be present on the host page)
+		if ("undefined" != typeof jQuery) {
+			shibbolethDiscoverySearchLimit = searchLimit;
+			jQuery.ajax({
+				url: base + "/search.js",
+				dataType: "script",
+				cache: true
+			});
+		}
 	}
 
 	if ("undefined" != typeof jQuery)
