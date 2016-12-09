@@ -204,22 +204,28 @@ public abstract class AbstractShibbolethServlet extends HttpServlet {
 	 * @param resp
 	 *            {@link HttpServletResponse} to modify
 	 * @param maxAge
-	 *            maximum caching time, in seconds. 0 disallows caching.
+	 *            maximum caching time, in seconds
 	 */
 	protected void setCacheHeaders(final HttpServletResponse resp, int maxAge) {
-		if (maxAge == 0) {
-			resp.setHeader("Cache-Control", "no-cache");
-			resp.setHeader("Pragma", "no-cache");
-			resp.setDateHeader("Expires", System.currentTimeMillis());
-			return;
-		}
-
 		if (maxAge > ONE_YEAR)
 			// HTTP 1.1 specifies: no longer than a year
 			maxAge = ONE_YEAR;
 		resp.setHeader("Cache-Control", "public, max-age=" + maxAge);
-		resp.setDateHeader("Expires", System.currentTimeMillis() + maxAge
-				* 1000);
+		final long now = System.currentTimeMillis();
+		resp.setDateHeader("Expires", now + maxAge * 1000l);
+		resp.setDateHeader("Last-Modified", now);
+	}
+
+	/**
+	 * Sets the cache-control headers to disallow caching.
+	 * 
+	 * @param resp
+	 *            {@link HttpServletResponse} to modify
+	 */
+	protected void setUncacheable(final HttpServletResponse resp) {
+		resp.setHeader("Cache-Control", "no-cache");
+		resp.setHeader("Pragma", "no-cache");
+		resp.setDateHeader("Expires", System.currentTimeMillis());
 	}
 
 	/**

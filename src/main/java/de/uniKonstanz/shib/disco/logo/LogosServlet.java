@@ -79,6 +79,13 @@ public class LogosServlet extends AbstractShibbolethServlet {
 			return;
 		}
 
+		// logos are immutable. therefore, if this is a cache revalidation, just
+		// return 304 immediately.
+		if (req.getHeaders("If-Modified-Since").hasMoreElements()) {
+			resp.sendError(HttpServletResponse.SC_NOT_MODIFIED);
+			return;
+		}
+
 		byte[] data;
 		if (!filename.equals(GENERIC_LOGO))
 			data = getLogo(filename);
@@ -86,7 +93,15 @@ public class LogosServlet extends AbstractShibbolethServlet {
 			data = generic;
 		// logo files are named according to their contents, so they never
 		// change. allow client to cache them forever.
-		setCacheHeaders(resp, Integer.MAX_VALUE);
+		if (data != null)
+			setCacheHeaders(resp, Integer.MAX_VALUE);
+
+		// if a named logo is unavailable, substitute the generic logo, but
+		// prevent that from being cached.
+		if (data == null) {
+			setUncacheable(resp);
+			data = generic;
+		}
 		resp.setContentType("image/png");
 		resp.setContentLength(data.length);
 		final ServletOutputStream output = resp.getOutputStream();
@@ -100,8 +115,7 @@ public class LogosServlet extends AbstractShibbolethServlet {
 	 * 
 	 * @param filename
 	 *            filename of the logo
-	 * @return the logo as a byte array, or the generic logo (as a byte array)
-	 *         on failure
+	 * @return the logo as a byte array, or {@code null} on failure
 	 */
 	private byte[] getLogo(final String filename) {
 		try {

@@ -158,7 +158,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 			// point in showing an empty discovery page; just report an error
 			// instead. make sure the error message doesn't get cached, though.
 			LOGGER.warning("no IdPs available for discovery!");
-			setCacheHeaders(resp, 0);
+			setUncacheable(resp);
 			final StringBuilder buffer = new StringBuilder();
 			buffer.append(noIdPsError);
 			buffer.append("Metadata not available, "
@@ -209,7 +209,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 
 		// page is per-user and will change if the "cookie favorite" changes, so
 		// it shouldn't be cached.
-		setCacheHeaders(resp, 0);
+		setUncacheable(resp);
 		sendResponse(resp, buffer, "text/html");
 	}
 
@@ -274,7 +274,7 @@ public class DiscoveryServlet extends AbstractShibbolethServlet {
 
 		// page is per-user and will change if the "cookie favorite" changes, so
 		// it shouldn't be cached.
-		setCacheHeaders(resp, 0);
+		setUncacheable(resp);
 		sendResponse(resp, buffer, "text/javascript");
 	}
 

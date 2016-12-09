@@ -132,8 +132,9 @@ public class LoginServlet extends AbstractShibbolethServlet {
 		cookie.setMaxAge(COOKIE_LIFETIME);
 		resp.addCookie(cookie);
 		// redirect user to shibboleth login URL. disallow caching; we want to
-		// see every login.
-		setCacheHeaders(resp, 0);
+		// see every login. it also prevents the link from breaking if the
+		// discovery return URL changes.
+		setUncacheable(resp);
 
 		sendRedirectToShibboleth(resp, params, encodedIdPEntityID);
 	}
