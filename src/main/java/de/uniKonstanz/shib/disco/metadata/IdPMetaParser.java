@@ -75,12 +75,14 @@ class IdPMetaParser extends XPMetaParser {
 	 *            return value; entries are appended to this list
 	 * @param entities
 	 *            list of entityIDs for IdPs
+	 * @throws IllegalStateException
+	 *             if metadata is not available yet
 	 */
 	public void addMetadata(final Collection<IdPMeta> list,
 			final Collection<String> entities) {
 		final Map<String, IdPMeta> map = metadata;
 		if (map == null)
-			return;
+			throw new IllegalStateException("metadata not yet available");
 
 		for (final String entityID : entities) {
 			final IdPMeta meta = map.get(entityID);
