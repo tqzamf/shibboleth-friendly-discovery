@@ -1,35 +1,6 @@
 /* CSS styles for the fallback button. */
-a.fallback {
-	display: block;
-	float: left;
-	width: 14.4em;
-	height: 8em;
-	margin: 0em 1em 1em 0em;
-	padding: .5em 1em 1em 1em;
-	border: 1px solid #eee;
-	background-color: #fff;
-	color: black;
-	font-family: sans-serif;
-	text-decoration: none;
-	overflow: hidden;
-	white-space: normal;
-	text-align: center;
-	margin: 0 auto;
-	box-sizing: content-box;
-	border-radius: .4em;
-}
-
-a.fallback:hover {
-	border: 1px solid #ccc;
-	background-color: #eee;
-}
-
-.fallback * {
-	display: block;
-}
-
-a.fallback img {
-	width: 14.4em;
-	height: 5.4em;
+img.fallback-shiblogo {
+	width: 16em;
+	height: 6em;
 	border: none;
 }
