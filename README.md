@@ -193,6 +193,16 @@ How to deploy
 	<Handler type="DiscoveryFeed" Location="/DiscoFeed"/>
 	```
 
+9. make sure all SPs using this servlet for discovery declare a discovery
+    endpoint in the federation metadata. the servlet otherwise refuses to
+    redirect, to avoid being an open redirect. the format of the entry is:
+
+    ```xml
+    <idpdisc:DiscoveryResponse index="1"
+        `Binding="urn:oasis:names:tc:SAML:profiles:SSO:idp-discovery-protocol"`
+        Location="https://sp.host/Shibboleth.sso/Login"/>
+    ```
+
 
 Discovery services
 ------------------
